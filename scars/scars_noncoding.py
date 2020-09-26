@@ -2,23 +2,25 @@ from scars import scars_queries
 
 # function that converts HGMD vcf to pybedtool object
 # filters for: 1) snvs, 2) CLASS=="DM" or "DM?"
-def VCFtoBedTool_HGMD(VCF_file, chr_list):
-    import vcf
+def VCFtoBedTool_HGMD(vcf_file, chr_list):
+    from pysam import VariantFile
     import pybedtools
 
-    HGMD_reader = vcf.Reader(filename=VCF_file, encoding='utf-8')
     HGMD_out_l = []
-    for record in HGMD_reader:
-        is_snv = (len(record.REF)==1) and (len(record.ALT[0])==1)       # filter for snvs
-        is_dm = (record.INFO['CLASS'] in ['DM', 'DM?'])                 # filter for class
+    bcf_in = VariantFile(vcf_file)
+
+    for record in bcf_in.fetch():
+        is_snv = (len(record.ref)==1 and len(record.alts[0])==1)
+        is_dm = record.info['CLASS'] in ['DM', 'DM?']
         if (is_snv and is_dm):
-            HGMD_out_l += [(record.CHROM, record.POS-1, record.POS)]    
+            HGMD_out_l += [(record.contig, record.start, record.stop)]
+
     HGMD_bed = pybedtools.BedTool(HGMD_out_l)\
-                         .each(prepend_chr)
+                         .each(scars_queries.prepend_chr)
 
     out = HGMD_bed.filter(lambda x: x.chrom in chr_list)\
                   .sort()
-
+     
     return out
 
 
@@ -26,19 +28,19 @@ def VCFtoBedTool_HGMD(VCF_file, chr_list):
 # function that converts ClinVar vcf to pybedtool object
 # filters for: 1) snvs, 2) CLNSIG=="Pathogenic" or "Likely_pathogenic"
 def VCFtoBedTool_ClinVar(VCF_file, chr_list, clnsig_l):
-    import vcf
+    from pysam import VariantFile
     import pybedtools
     
-    ClinVar_reader = vcf.Reader(filename=VCF_file, encoding='utf-8')
+    bcf_in = VariantFile(VCF_file)
     ClinVar_out_l = []
-    for record in ClinVar_reader:
-        is_snv = (record.INFO['CLNVC'] == "single_nucleotide_variant")                      # filter for snvs
-        is_p_or_lp = False if 'CLNSIG' not in record.INFO.keys()\
-                else (record.INFO['CLNSIG'][0] in clnsig_l)      # filter for clinical significance
+    for record in bcf_in.fetch():
+        is_snv = (record.info['CLNVC'] == "single_nucleotide_variant")                      # filter for snvs
+        is_p_or_lp = False if 'CLNSIG' not in record.info.keys()\
+                else (record.info['CLNSIG'][0] in clnsig_l)      # filter for clinical significance
         if (is_snv and is_p_or_lp):
-            ClinVar_out_l += [(record.CHROM, record.POS-1, record.POS)]
+            ClinVar_out_l += [(record.contig, record.start, record.stop)]
     ClinVar_bed = pybedtools.BedTool(ClinVar_out_l)\
-                            .each(prepend_chr)
+                            .each(scars_queries.prepend_chr)
 
     out = ClinVar_bed.filter(lambda x: x.chrom in chr_list)\
                      .sort()

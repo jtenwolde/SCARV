@@ -1,11 +1,30 @@
-#script requires: pyVCF, pybedtools, shutil, urllib, contextlib, numpy, tempfile
 from scars import scars_assess
 
 
-# function to prepend "chr" in front of chromosome names to make all ranges constistent
-def prepend_chr(x):
-    x.chrom = 'chr' + x.chrom
-    return x
+def coordlist_to_pyranges (pos_l, entryNames = ["Chromosome", "Start", "End"]):
+    assert len(pos_l[0]) == len(entryNames), "not enough entry names provided"
+
+    import pyranges as pr 
+
+    values_by_entry = zip(*pos_l)
+    pos_dict = {entry: values for entry, values in zip(entryNames, values_by_entry)}
+    pos_pr = pr.from_dict(pos_dict)
+
+    return pos_pr 
+
+
+
+def sample_loci_from_pr (gr, n_loci):
+    import pyranges as pr
+    import numpy as np
+
+    N = gr.length
+    gr_spl = gr.tile(1)
+
+    ix = np.random.choice(range(N), n_loci, replace=False)
+    sample_pr = pr.PyRanges(gr_spl.as_df().iloc[ix,:])
+
+    return sample_pr
 
 
 
@@ -24,11 +43,16 @@ def process_record(record, query):
     if record.info[AC_str][0] == 0:
         return ()
 
-    if (record.info[AF_str][0] < query['maf_range'][0]) or (record.info[AF_str][0] > query['maf_range'][1]):
+    if ((record.info[AF_str][0] < query['maf_range'][0]) or (record.info[AF_str][0] > query['maf_range'][1])) and\
+        ((1-record.info[AF_str][0] < query['maf_range'][0]) or (1-record.info[AF_str][0] > query['maf_range'][1])):
         return ()
 
-    out = (record.contig, record.start, record.stop, record.ref, record.alts[0],\
-        str(record.info[AC_str][0]), str(record.info[AN_str]))
+    if (record.info[AF_str][0] <= 0.5):
+        out = (record.contig, record.start, record.stop, record.ref, record.alts[0],\
+            str(record.info[AC_str][0]), str(record.info[AN_str]))
+    else:
+        out = (record.contig, record.start, record.stop, record.alts[0], record.ref,\
+            str(record.info[AN_str] - record.info[AC_str][0]), str(record.info[AN_str]))
 
     return out
 
@@ -53,163 +77,104 @@ def query_vcf(vcf_file, queries):
 
 
 
-def convert_to_bed(data_list):
-    import pybedtools
-
-    bed = pybedtools.BedTool(data_list).sort()
-
-    return(bed)
-
-
-
 # assumes format chrX:pos, mean, median, over_1, over_5, over_10, over_15, over_20, over_25, over_30, over_50, over_100
 def filter_coverage(coverage_file):
-    import pybedtools
     import gzip
 
     f = gzip.open(coverage_file, 'r') 
-    next(f)
+    next(f) #remove header
 
     out_l = []
     for line in f:
         line_spl = line.decode().split('\t')
         if (float(line_spl[6]) >= 0.9) and (float(line_spl[11]) <= 0.1):
-            pos = line_spl[0]
-            out_l += [(pos[:4], int(pos[5:])-1, int(pos[5:]))]
+            pos = line_spl[0].split(':')
+            out_l.append((pos[0], int(pos[1])-1, int(pos[1])))
 
-    bed = pybedtools.BedTool(out_l)\
-                    .sort()\
-                    .merge()
-    return bed
+    return out_l
 
 
 
-def filter_phyloP(phyloP_bw, chr_list, range=[-3,0]):
+def filter_phyloP(phyloP_bw, phyloP_range=[-3,0]):
     import pyBigWig
-    import pybedtools
-    import numpy as np
 
     bw = pyBigWig.open(phyloP_bw)
 
-    bed_l = []
-    chr_present = list(bw.chroms().keys())
-    for chrom in (chr_list and chr_present):
+    out_l = []
+    for chrom in bw.chroms().keys():
         vals = bw.intervals(chrom)
-        l = [(chrom, r[0], r[1]) for r in vals if ((r[2] >= range[0]) and (r[2] <= range[1]))]
-        bed_l += [pybedtools.BedTool(l).merge()]
+        l = [(chrom, record[0], record[1]) for record in vals\
+            if ((record[2] >= phyloP_range[0]) and (record[2] <= phyloP_range[1]))]
+        out_l.extend(l)
 
-    if len(bed_l) > 1:
-        out = bed_l[0].cat(*bed_l[1:], postmerge=False)
-    else:
-        out = bed_l[0]
-
-    return out
-
-
-def filter_sites(bed, reliable_sites_bw):
-    import pyBigWig
-    import pybedtools
-
-    out = []
-    bw = pyBigWig.open(reliable_sites_bw)
-    for r in bed:
-        vals = bw.intervals(r.chrom, r.start, r.end)
-        if vals is not None:
-            for pos in vals:
-                out+=[(r.chrom, max(pos[0], r.start), min(pos[1], r.end))]
-    bed_reliable = pybedtools.BedTool(out)
-
-    return bed_reliable
+    return out_l
 
 
 
-def get_reliable_sites(minOPR_file, coverage_file, chr_list, genome, snvs_fail, common_vars, bw_file=None):
-    import pybedtools
-    import pyBigWig
+def get_reliable_sites(coverage_file, genome, snvs_fail_pr, common_vars_pr):
+    import pyranges as pr
 
-    minOPR_pass = pybedtools.BedTool(minOPR_file)
-    coverage = filter_coverage(coverage_file)
+    covered_loci_l = filter_coverage(coverage_file)
+    covered_loci_pr = coordlist_to_pyranges(covered_loci_l)
+    covered_loci_mgd_pr = covered_loci_pr.merge()
 
-    ranges = minOPR_pass.intersect(coverage)\
-                        .subtract(snvs_fail)\
-                        .subtract(common_vars)\
-                        .sort()\
-                        .merge()\
-                        .saveas()
+    ranges = covered_loci_mgd_pr.subtract(snvs_fail_pr)\
+                                .subtract(common_vars_pr)\
 
-    # save reliable sites in form of bw for time efficient reuse
-    chroms, starts, ends = [r.chrom for r in ranges], [r.start for r in ranges], [r.end for r in ranges]
-    bw = pyBigWig.open(bw_file, "w")
-    header = [(chrom, genome[chrom][1]) for chrom in chr_list]
-    bw.addHeader(header)
-    bw.addEntries(chroms, starts, ends=ends, values=[1.0] * len(chroms))
-    bw.close()
+    return ranges
 
 
 
-def get_training_loci(reliable_sites_bw, phyloP_bw, ensembl_ftp, chr_list, genome):
-    import pybedtools
 
-    genome_bed = pybedtools.BedTool([(chrom, 0, genome[chrom][1]) for chrom in chr_list])
+def get_training_loci(reliable_sites_pr, phyloP_bw, ensembl_ftp):
+    import pyranges as pr
+    
+    phylop_filtered_l = filter_phyloP(phyloP_bw)
+    phylop_filtered_pr = coordlist_to_pyranges(phylop_filtered_l)
+    phylop_filtered_mgd_pr = phylop_filtered_pr.merge()
 
-    reliable_sites = filter_sites(genome_bed, reliable_sites_bw)
-    phylop = filter_phyloP(phyloP_bw, chr_list)
-    exons = query_ensembl(ensembl_ftp, "exon", chr_list)
+    exons = query_ensembl(ensembl_ftp, "exon")
 
-    out = reliable_sites.intersect(phylop)\
-                        .subtract(exons)\
-                        .sort()\
-                        .merge()
-    return out
-
-
-
-# function that downloads the ensembl annotation
-# filters out specific annotation using annot argument
-# assumes chr_list contains "chr"
-def query_ensembl(ensembl_ftp, annot, chr_list):
-    import pybedtools
-    import shutil
-    import urllib.request as request
-    from contextlib import closing
-    import numpy as np
-    import tempfile
-
-    tmpdir = tempfile.TemporaryDirectory()
-
-    with closing(request.urlopen(ensembl_ftp)) as r:
-        with open(tmpdir.name + 'ensembl_data', 'wb') as f:
-           shutil.copyfileobj(r, f)
-
-    data = pybedtools.BedTool(tmpdir.name + 'ensembl_data')
-    if "chr" not in data[0].chrom:
-        data = data.each(prepend_chr)
-
-    out = data.filter(lambda x: x.chrom in chr_list)\
-              .filter(lambda x: x.fields[2]==annot)\
-              .sort()  #no merge to preserve attributes
-
-    return out
+    training_loci_pr = reliable_sites_pr.intersect(phylop_filtered_mgd_pr)\
+                                        .subtract(exons)
+    
+    return training_loci_pr
 
 
 
-def query_sequence(bed, reference_fasta, flank, genome):
-    import pybedtools
+# gtf format uses inclusive range 
+def query_ensembl(ensembl_ftp, annot):
+    import pandas as pd
+    import pyranges as pr
+
+    data = pd.read_csv(ensembl_ftp, sep='\t', header=None,\
+        names=['Chromosome', 'source', 'type', 'Start', 'End', 'score', 'strand',\
+        'phase', 'attributes'], skiprows=[i for i in range(5)], compression="gzip")
+    data['Start'] = data['Start'] - 1 
+
+    data_correct_type = data.loc[data['type']==annot]
+    data_correct_type["Chromosome"] = ["chr" + str(chrom) for chrom in data_correct_type["Chromosome"]]
+
+    data_correct_type_pr = pr.PyRanges(data_correct_type)
+
+    return data_correct_type_pr
+
+
+
+def query_sequence(gr, reference_fasta, flank):
     import pandas as pd
     import numpy as np
+    import pyranges as pr
 
-    bed_annot = bed.slop(b=flank, genome=genome)\
-                   .sequence(fi=reference_fasta)
+    gr_extd = gr.slack(flank)
+    seqs = pr.get_fasta(gr_extd, reference_fasta)
 
-    seqs = []
-    for line in open(bed_annot.seqfn):
-        if '>' in line: continue
-        seqs += [line.strip()]
-
-    seqs_nested = [[stri[i:j].upper() for i, j in zip(range(len(stri)-2*flank), range(2*flank+1, len(stri)+1))] for stri in seqs]
+    seqs_nested = [[stri[i:j] for i, j in zip(range(len(stri)-2*flank), range(2*flank+1, len(stri)+1))] for stri in seqs]
     seqs_flat = [item for sublist in seqs_nested for item in sublist]
 
-    nucs = [list(seq) for seq in seqs_flat]
+    seqs_flat_upper = [seq.upper() for seq in seqs_flat]
+
+    nucs = [list(seq) for seq in seqs_flat_upper]
     nucs_df = pd.DataFrame(nucs)
 
     # one hot encode the sequences
@@ -223,6 +188,31 @@ def query_sequence(bed, reference_fasta, flank, genome):
 
     return nucs_rshpd
 
+
+def correct_refs(gr, snvs_pr, seq):
+    import numpy as np
+    import pandas as pd
+    import pyranges as pr
+
+    flank = seq.shape[1]//2
+
+    gr_spl = gr.tile(1)
+    row_ix = pd.Series(range(len(gr_spl)), name="id")
+    gr_spl = gr_spl.insert(row_ix)
+
+    gr_spl_on_snvs_hits = gr_spl.join(snvs_pr)
+    
+    anyHits = (gr_spl_on_snvs_hits.length != 0)
+    
+    if anyHits:
+        gr_spl_hit_ids = gr_spl_on_snvs_hits.id
+
+        nucs_df = pd.DataFrame(gr_spl_on_snvs_hits.ref)
+        nucs_cat = nucs_df.apply(lambda x: pd.Categorical(x, categories = ['A', 'C', 'G', 'T']))
+        
+        refs_from_vcf_ohe = np.array(pd.get_dummies(nucs_cat))
+        seq[gr_spl_hit_ids, flank] = refs_from_vcf_ohe
+        
 
 
 def balance_data(AN, AC):
@@ -242,16 +232,22 @@ def balance_data(AN, AC):
 
 
 
-def split_and_annot_data(loci, snvs_rare, genome, reference_fasta, pop_size):
-    import pybedtools
+# does not require gr to be width 1
+def split_data(gr, snvs_pr, seq, pop_size):
     import numpy as np
     import pandas as pd
+    import pyranges as pr
 
-    n_sites = sum([len(r) for r in loci])
+    n_sites = sum(gr.lengths())
+    flank = seq.shape[1]//2
 
-    neutral_snvs = snvs_rare.intersect(loci)
+    gr_spl = gr.tile(1)
+    row_ix = pd.Series(range(n_sites), name="id")
+    gr_spl = gr_spl.insert(row_ix)
 
-    AC = np.array([int(snv.fields[5]) for snv in neutral_snvs])
+    neutral_snvs = snvs_pr.join(gr_spl)
+
+    AC = np.array(neutral_snvs.ac, dtype=int)
 
     AC_skew = np.random.binomial(n=AC, p=0.6)
     AC_bal = AC - AC_skew
@@ -266,47 +262,13 @@ def split_and_annot_data(loci, snvs_rare, genome, reference_fasta, pop_size):
     N_cal = np.random.binomial(N_skew, p=2/3)
     N_test = N_skew - N_cal
 
-    alts_ohe = np.array(pd.get_dummies([snv.fields[4] for snv in neutral_snvs]))
-    refs_ohe = query_sequence(loci, reference_fasta, 0, genome)[:,0,:]
+    alts_ohe = np.array(pd.get_dummies(neutral_snvs.alt))
+    refs_ohe = seq[:,flank,:]
     nuc = np.concatenate([refs_ohe, alts_ohe])
 
-    loci_spl = pybedtools.BedTool().window_maker(b=loci,w=1)
-    hits = findOverlaps(neutral_snvs, loci_spl)
-    indices = np.concatenate((np.arange(len(loci_spl)), hits[:,1]), axis=0)
+    indices = np.concatenate((np.arange(n_sites), neutral_snvs.id), axis=0)
 
     return indices, nuc, np.c_[N_bal, N_cal, N_test]
-
-
-
-def findOverlaps(bed1, bed2):
-    import pyranges as pr
-    import pybedtools
-    import pandas as pd
-    import numpy as np
-
-    gr1 = bed_to_pr(bed1)
-    gr2 = bed_to_pr(bed2)
-
-    gr1.id = np.arange(len(gr1))
-    gr2.id = np.arange(len(gr2))
-
-    out = gr1.join(gr2, suffix="_2").as_df()[['id', 'id_2']].to_numpy()
-
-    return out
-
-
-
-def bed_to_pr (bed):
-    import pyranges as pr
-    import pybedtools
-
-    chroms = [int(r.chrom.replace("chr", "")) for r in bed]
-    starts = [r.start for r in bed]
-    ends = [r.end for r in bed]
-
-    gr = pr.from_dict({"Chromosome": chroms, "Start": starts, "End": ends})
-
-    return gr
 
 
 

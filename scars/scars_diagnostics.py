@@ -8,10 +8,18 @@ def split(x, f):
 def reliability_plot (confidence, accuracy):
     import matplotlib.pyplot as plt
 
+    min_acc = min(accuracy)
+    min_conf = min(confidence)
+
     plt.plot(confidence, accuracy, color="blue")
     plt.plot([0,1],[0,1])
-    plt.ylim((min(accuracy), 1))
-    plt.xlim((min(confidence), 1))
+    
+    plt.ylim((min(min_acc, min_conf), 1))
+    plt.xlim((min(min_acc, min_conf), 1))
+    
+    plt.xlabel('Confidence')
+    plt.ylabel('Accuracy')
+
     print(plt.show())
 
     return 
@@ -19,11 +27,13 @@ def reliability_plot (confidence, accuracy):
 
 def expected_calibration_error(n_bins, preds, y_mat, weights, plot=True):
     import collections
+    import numpy as np
+    import pandas as pd
 
     y_hat = np.argmax(preds, axis=1)
     p_hat = np.max(preds, axis=1)
 
-    binned_preds = pd.qcut(p_hat, n_bins, labels=False, duplicates='drop')
+    binned_preds = pd.qcut(p_hat, n_bins, labels=False, duplicates='drop').astype(int)
     bin_sizes = collections.Counter(binned_preds)
 
     y = np.argmax(y_mat, axis=1)
@@ -87,6 +97,25 @@ def hand_till_auc(preds, y_test, weights=None):
 
     AUC = running_total_AUC / len(pairs)
     return AUC
+
+
+
+def max_auc(preds, weights):
+    import numpy as np
+
+    output = np.empty(shape=(preds.shape[0], 4), dtype=int)
+
+    for i in range(preds.shape[0]):
+        output[i,:] = np.random.multinomial(weights[i], preds[i,:], size=1)
+    
+    output_extd = output[np.repeat(np.arange(output.shape[0]), np.sum(output > 0, axis=1))] 
+    weight = np.sum(output_extd, axis=1)
+    output_binary = (output_extd > 0)*1
+    p = preds[np.repeat(np.arange(output.shape[0]), np.sum(output > 0, axis=1))]
+
+    AUC = hand_till_auc(p, output_binary, weight)
+    return AUC
+
 
 
 from keras.callbacks import Callback

@@ -1,41 +1,64 @@
 from scars import scars_queries
 
-def query_codata_CpG_meth(loci, filename_list):
+def get_codata(gr, human_ovary_bw_files, human_ovary_impute_vals, CpG_methylation_files, exons_annot):
+    import numpy as np
+
+    human_ovary_tracks = query_codata_human_ovary(gr, human_ovary_bw_files, human_ovary_impute_vals)
+    CpG_methylation = query_codata_CpG_meth(gr, CpG_methylation_files)
+    exon_spline_basis = query_nearest_exon(gr, exons_annot)
+
+    codata = np.c_[human_ovary_tracks, CpG_methylation, exon_spline_basis]
+    return codata
+
+
+def query_codata_CpG_meth(gr, filename_list):
     import pyBigWig
     import numpy as np
 
-    N = sum([len(r) for r in loci])
+    N = gr.length
     out = np.empty(shape=(N, 4 * len(filename_list)), dtype=np.int8)
     for ix, file in enumerate(filename_list):
         bw = pyBigWig.open(file)
-        scores_nested = [bw.values(r.chrom, r.start, r.end) for r in loci]
+        scores_nested = [bw.values(row.Chromosome, row.Start, row.End) for row in gr.as_df().itertuples()]
         scores = np.array([item for sublist in scores_nested for item in sublist])
         scores[np.isnan(scores)] = -1
-        arr = np.zeros(shape=(N, 4), dtype=np.int8)
-        arr[scores>0.6, 3] = 1
-        arr[(scores>0.2) & (scores<=0.6), 2] = 1 
-        arr[(scores>=0) & (scores<=0.2), 1] = 1
-        arr[scores==-1, 0] = 1
+        arr = one_hot_encode_methylation_signal(scores)
         out[:,(4*ix):(4*(ix+1))] = arr
+        bw.close()
 
     return out
 
 
+def one_hot_encode_methylation_signal(scores):
+        import numpy as np
+
+        N = len(scores)
+        arr = np.zeros(shape=(N, 4), dtype=np.int8)
+
+        arr[scores>60, 3] = 1
+        arr[(scores>20) & (scores<=60), 2] = 1 
+        arr[(scores>=0) & (scores<=20), 1] = 1
+        arr[scores==-1, 0] = 1
+
+        return arr 
+
 
 # assumes bigWig files with scores that don't need binning/ohe
 # furthermore it is useful to sort the filename_list to make covariates identifiable
-def query_codata_human_ovary(loci, filename_list, impute_values):
+def query_codata_human_ovary(gr, filename_list, impute_values):
+    import pyranges as pr
     import pyBigWig
     import numpy as np
 
-    N = sum([len(r) for r in loci])
+    N = gr.length
     out = np.empty(shape=(N, len(filename_list)))
     for ix, file in enumerate(filename_list):
         bw = pyBigWig.open(file)
-        scores_nested = [bw.values(r.chrom, r.start, r.end) for r in loci]
+        scores_nested = [bw.values(row.Chromosome, row.Start, row.End) for row in gr.as_df().itertuples()]
         scores = np.array([item for sublist in scores_nested for item in sublist])
         scores[scores==np.nan] = impute_values[ix]
         out[:,ix] = scores
+        bw.close()
 
     return out
 
@@ -81,33 +104,24 @@ def gen_spline_basis(x, order, knots_raw, intercept, i = 1):
 
 
 
-def annot_with_constr(r, constr_by_ID_dict, impute):
-    if r.attrs['exon_id'] in constr_by_ID_dict.keys():
-        r.attrs['constr'] = str(constr_by_ID_dict[r.attrs['exon_id']])
-    else:
-        r.attrs['constr'] = impute
-    return r
-
-
-
-def query_nearest_exon(loci, exons_annot, chr_list):
+def query_nearest_exon(gr, exons_annot):
     import pybedtools
     import pandas as pd
     import numpy as np
 
-    # split loci into individual sites
-    loci_spl = pybedtools.BedTool().window_maker(b=loci, w=1)
+    # split loci into individual sites and find closest exons, all ties are included, so that strongest constraint can taken across ties
+    gr_spl = gr.tile(1)
+    gr_spl_with_nearest_exon = gr_spl.k_nearest(exons_annot)
 
-    # find closest exons, all ties are included, so that maximum pLI can taken across ties
-    loci_with_nearest_exon = loci_spl.closest(exons_annot, d=True)
+    # find most constrained for all ties
+    chr_pos_dist_constr = gr_spl_with_nearest_exon.as_df()[['Chromosome', 'End', 'constr', 'Distance']]
 
-    # find maximum pLI for all ties
-    chr_pos_dist_constr_l = [[r[0], r[2], int(r[-1]), float(r[11].split(';')[-2][7:])] for r in loci_with_nearest_exon]
-    chr_pos_dist_constr_df = pd.DataFrame(chr_pos_dist_constr_l, columns=['chr','pos','dist','constr'])
-    chr_pos_dist_min_constr = chr_pos_dist_constr_df.groupby(['chr','pos','dist'], sort=False)['constr'].min().reset_index()
+    chr_pos_dist_constr['Distance'] = np.abs(chr_pos_dist_constr['Distance'])
+    chr_pos_dist_constr['Chromosome'] = chr_pos_dist_constr['Chromosome'].astype(str) # change from categorical to string type to avoid outer product blow up by groupby
 
-    dist_and_constr = chr_pos_dist_min_constr[['dist','constr']].values
-    constr_unknown = (dist_and_constr[:,1]==-1)
+    chr_pos_dist_min_constr = chr_pos_dist_constr.groupby(['Chromosome','End','Distance'], sort=False)['constr'].min().reset_index()
+
+    dist_and_constr = chr_pos_dist_min_constr[['Distance','constr']].values
  
     # need to feed both constraint and distance to bspline function
     dist_basis = gen_spline_basis(dist_and_constr[:,0], order=3, knots_raw = [0, 1, int(2e3), int(1e5), 20083767], intercept=False)
@@ -117,22 +131,39 @@ def query_nearest_exon(loci, exons_annot, chr_list):
     c = np.tile(range(constr_basis.shape[1]), dist_basis.shape[1])
 
     spl_basis = dist_basis[:,c] * constr_basis[:,r]
-    spl_basis[constr_unknown] = np.nan
 
     return spl_basis
 
 
 
-
-def get_codata(loci, human_ovary_bw_files, human_ovary_impute_vals, CpG_methylation_files, exons_annot, chr_list):
+# takes in numpy array
+# returns n x 2 array with means and standard deviations
+def get_normalisation (X):
     import numpy as np
 
-    human_ovary_tracks = query_codata_human_ovary(loci, human_ovary_bw_files, human_ovary_impute_vals)
-    CpG_methylation = query_codata_CpG_meth(loci, CpG_methylation_files)
-    exon_spline_basis = query_nearest_exon(loci, exons_annot, chr_list)
+    means = np.mean(X, axis=0)
+    std_devs = np.std(X, axis=0)
 
-    codata = np.c_[human_ovary_tracks, CpG_methylation, exon_spline_basis]
-    return codata
+    out = np.c_[means, std_devs]
+
+    return out
+
+
+
+# takes in n x 2 numpy array with means in 1st column, sd in 2nd
+# returns normalised numpy array
+def normalise_data (X, scaling):
+    import numpy as np
+
+    if X.dtype != 'float':
+        X = X.astype('float')
+    
+    for i in range(X.shape[1]):
+        X[:,i] = (X[:,i] - scaling[i,0])/ scaling[i,1]
+
+    const_cols = (scaling[:,1] == 0)
+
+    return X[:, ~const_cols]
 
 
 
