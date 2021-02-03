@@ -86,7 +86,6 @@ def hand_till_auc(preds, y_test, weights=None):
         for i in range(len(start_ix)):
             if y_std[i] == 1:
                 S_i = S_i + sum(range(start_ix[i], end_ix[i]))
-            if i % int(1e6) == 0: print(i)
 
         n_i = sum(w_std[y_std == 1])
         n_j = sum(w_std[y_std == 0])
@@ -100,8 +99,11 @@ def hand_till_auc(preds, y_test, weights=None):
 
 
 
-def max_auc(preds, weights):
+def max_auc(preds, weights=None):
     import numpy as np
+
+    if weights is None:
+        weights = np.repeat(1, preds.shape[0])
 
     output = np.empty(shape=(preds.shape[0], 4), dtype=int)
 

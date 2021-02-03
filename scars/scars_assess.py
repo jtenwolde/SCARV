@@ -1,59 +1,21 @@
-from scars import scars_queries, scars_codata, scars_fit
+from scars import scars_queries
 
-def predict_and_calibrate_platt_iso(model_calibration, Z, sequence_features):
+
+def get_scars (gr, reliable_sites, reference_fasta, cnn, calibration_model, pop_size, snvs, genome):
     import numpy as np
 
-    flank = int((sequence_features.shape[1]-1)/2)
+    gr_mgd = gr.merge()
+    gr_reliable_mgd = gr_mgd.intersect(reliable_sites)
 
-    Z_ref = np.nansum(Z * sequence_features[:, flank, :], axis=1)
-    neg_inf_class_scores = ~np.isfinite(Z_ref) #capture which class scores are neg infinity
-    allWeightOnReference = np.where(Z_ref == 0)
+    S_obs = get_observed_entropy(gr_reliable_mgd, snvs, pop_size)
+    S_exp = get_expected_entropy(gr_reliable_mgd, snvs, pop_size, cnn, calibration_model, genome, reference_fasta)
 
-    pred_ref_clbt = np.empty(shape=(Z_ref.shape[0]))
-    pred_ref_clbt[~neg_inf_class_scores] = model_calibration.transform(Z_ref[~neg_inf_class_scores])
-    pred_ref_clbt[neg_inf_class_scores] = model_calibration.transform([-1000]) #replace with clipped lowest value
+    S_by_range = match_scores_to_ranges(gr, gr_reliable_mgd, S_obs, S_exp)
 
-    #temporary matrix storing inf for the references alleles, so that softmax can be applied to alts only
-    tmp = np.inf * sequence_features[:,flank,:]
-    tmp[np.isnan(tmp)] = 0
-
-    class_scores_alts = Z * (1-sequence_features[:, flank,:]) - tmp
-    class_scores_alts[np.where(np.isnan(class_scores_alts))] = -np.inf # situation occurs when alt is assigned p=1 by cnn
-    class_preds_alts = np.apply_along_axis(softmax, 1, class_scores_alts)
-
-    class_preds_alts_scaled = np.apply_along_axis(lambda x: x*(1-pred_ref_clbt), 0, class_preds_alts)
-    class_preds_ref = np.apply_along_axis(lambda x: x*pred_ref_clbt, 0, sequence_features[:, flank,:])
-
-    class_preds = class_preds_alts_scaled + class_preds_ref
-    class_preds[allWeightOnReference] = sequence_features[allWeightOnReference, flank]
-
-    return class_preds
+    return S_by_range
 
 
-
-def softmax(v):
-    import numpy as np
-    val = np.exp(v)/np.sum(np.exp(v))
-    return val
-
-
-
-def get_expected(seqs, codata, model_bal, model_cal, pop_size):
-    import numpy as np
-    import pybedtools
-
-    flank = seqs.shape[1]//2
-
-    preds_bal = model_bal.predict([seqs, codata])
-    preds = predict_and_calibrate_platt_iso(model_cal, np.log(preds_bal), seqs)
-    
-    expected = (1-np.sum(preds * seqs[:, flank, :], axis=1)) * 2 * pop_size
-
-    return expected
-
-
-#snvs_pr must be annotated with ac column (int) if provided
-def get_observed(gr, snvs_pr):
+def get_observed_entropy(gr, snvs, pop_size):
     import pandas as pd
     import numpy as np
     import pyranges as pr
@@ -62,15 +24,68 @@ def get_observed(gr, snvs_pr):
     index = pd.Series(range(len(gr_spl)), name="id")
     gr_spl = gr_spl.insert(index)
 
-    snvHits = gr_spl.join(snvs_pr, suffix="_snv").as_df()
+    snvHits = gr_spl.join(snvs).as_df()
+    
     anyHits = (snvHits.shape[0] != 0)
+    if not anyHits:
+        return np.zeros(gr.length)
 
-    observed = np.zeros(len(gr_spl))
-    if anyHits:
-        ac_by_id = snvHits.groupby(['id']).agg({'ac': "sum"})
-        observed[ac_by_id.index] = ac_by_id['ac']
+    Alt_AC_table = np.zeros(shape=(gr.length, 4), dtype=np.int)
 
-    return observed
+    Alt_AC_table[snvHits.loc[snvHits.alt=="A"].id, 0] = snvHits.loc[snvHits.alt=="A"].ac
+    Alt_AC_table[snvHits.loc[snvHits.alt=="C"].id, 1] = snvHits.loc[snvHits.alt=="C"].ac
+    Alt_AC_table[snvHits.loc[snvHits.alt=="G"].id, 2] = snvHits.loc[snvHits.alt=="G"].ac
+    Alt_AC_table[snvHits.loc[snvHits.alt=="T"].id, 3] = snvHits.loc[snvHits.alt=="T"].ac
+
+    Ref_AC = np.repeat(2*pop_size, gr.length)
+    Ref_AC[snvHits.id] = snvHits.an
+    Ref_AC -= np.sum(Alt_AC_table, axis=1)
+
+    AC_table = np.c_[Alt_AC_table, Ref_AC]
+    S = get_entropy(AC_table/np.sum(AC_table, axis=1)[:, np.newaxis])
+
+    return S
+
+
+def get_expected_entropy(gr, snvs, pop_size, cnn, calibration_model, genome, reference_fasta):
+    
+    flank = cnn.input_shape[1]//2
+
+    sequence = scars_queries.query_sequence(gr, flank, genome, reference_fasta)
+    scars_queries.correct_refs(gr, snvs, sequence)    
+
+    preds_uncalibrated = cnn.predict(sequence)
+    preds = calibrate(preds_uncalibrated, calibration_model, sequence)
+    
+    S = get_entropy(preds)  
+
+    return S
+
+
+def get_entropy (p):
+    import numpy as np
+    return np.nansum(-p * np.log2(p), axis=p.ndim-1)
+
+
+def calibrate(uncalibrated_predictions, calibration_model, sequence):
+    import numpy as np
+
+    epsilon = 1e-9
+    flank = sequence.shape[1]//2
+    class_scores = np.log(uncalibrated_predictions)
+
+    ref_score = np.nansum(class_scores * sequence[:, flank, :], axis=1)
+    ref_score[~np.isfinite(ref_score)] = np.log(epsilon)                    # calibration model doesn't accept -np.inf
+    ref_score_calibrated = calibration_model.transform(ref_score)
+    ref_prob = np.apply_along_axis(lambda x: x * ref_score_calibrated, 0, sequence[:, flank, :])
+
+    alternate_probs_unnormalised = np.exp(class_scores) * (1 - sequence[:, flank, :])
+    normalisation_factor = (1 - ref_score_calibrated) / np.sum(alternate_probs_unnormalised, axis=1)
+    normalisation_factor[np.isnan(normalisation_factor)] = 1                # division by zero occurs when all weight is on reference
+    alternate_probs = np.apply_along_axis(lambda x: x * normalisation_factor, 0, alternate_probs_unnormalised)
+
+    prediction = ref_prob + alternate_probs
+    return prediction
 
 
 def match_scores_to_ranges(gr, gr_reliable_mgd, obs_reliable_flat, exp_reliable_flat):
@@ -99,36 +114,17 @@ def match_scores_to_ranges(gr, gr_reliable_mgd, obs_reliable_flat, exp_reliable_
     return out
 
 
-
-def evaluate(gr, reliable_sites, reference_fasta, flank, model_bal, model_cal, pop_size, snvs, codata_args, codataNormalisation=None, split=False):
+def toPercentile(scores, percentiles):
+    import pandas as pd
     import numpy as np
 
-    gr_mgd = gr.merge()
+    # extend boundaries in case min/max extends beyond sampled min/max
+    percentiles[0] = -np.inf
+    percentiles[-1] = np.inf 
 
-    gr_reliable_mgd = gr_mgd.intersect(reliable_sites)
+    assert len(np.unique(percentiles)) == len(percentiles), "Percentile values are non-unique"
 
-    obs = get_observed(gr_reliable_mgd, snvs)
-
-    if len(codata_args) > 0: 
-        assert codataNormalisation is not None, "normalisation required when providing arguments to read as codata"
-
-        codata = scars_codata.get_codata(gr_reliable_mgd, *codata_args)
-        codata = scars_codata.normalise_data(codata, codataNormalisation)
-    else:
-        codata = np.empty((len(obs),0))
-
-    seqs = scars_queries.query_sequence(gr_reliable_mgd, reference_fasta, flank)
-    scars_queries.correct_refs(gr_reliable_mgd, snvs, seqs)    
-    scars_fit.anchor_on_AC(seqs)
-    
-    exp = get_expected(seqs, codata, model_bal, model_cal, pop_size)
-
-    if not split:
-        return [sum(obs), sum(exp), sum(obs)/sum(exp)]
-    else:
-        return match_scores_to_ranges(gr, gr_reliable_mgd, obs, exp)
-
-
-
+    percentiles = pd.cut(scores, bins=percentiles, labels=np.arange(0.1,100.1,0.1), include_lowest=True)
+    return percentiles
 
 

@@ -1,10 +1,29 @@
 from scars import scars_queries
 
+def getNonCodingPathogenic(exon_flank, ensembl_ftp, hgmd_vcf, annotation_table_fn):
+    import pyranges as pr
+
+    exons = scars_queries.query_ensembl(ensembl_ftp, "exon")
+    transcripts = scars_queries.query_ensembl(ensembl_ftp, "transcript")
+    introns = transcripts.subtract(exons)
+
+    exons_extensions = exons.slack(exon_flank)\
+                            .intersect(introns)
+
+    hgmd_snvs = VCFtoPyRanges_HGMD(hgmd_vcf)
+
+    hgmd_snvs_noncoding = hgmd_snvs.subtract(exons)\
+                                   .subtract(exons_extensions)
+
+    out = filterForRegulatory(hgmd_snvs_noncoding, annotation_table_fn)
+
+    return out
+
+
 # function that converts HGMD vcf to pybedtool object
 # filters for: 1) snvs, 2) CLASS=="DM" or "DM?"
-def VCFtoBedTool_HGMD(vcf_file, chr_list):
+def VCFtoPyRanges_HGMD(vcf_file):
     from pysam import VariantFile
-    import pybedtools
 
     HGMD_out_l = []
     bcf_in = VariantFile(vcf_file)
@@ -13,60 +32,32 @@ def VCFtoBedTool_HGMD(vcf_file, chr_list):
         is_snv = (len(record.ref)==1 and len(record.alts[0])==1)
         is_dm = record.info['CLASS'] in ['DM', 'DM?']
         if (is_snv and is_dm):
-            HGMD_out_l += [(record.contig, record.start, record.stop)]
+            HGMD_out_l += [(record.contig, record.start, record.stop, record.alts[0])]
 
-    HGMD_bed = pybedtools.BedTool(HGMD_out_l)\
-                         .each(scars_queries.prepend_chr)
+    HGMD_bed = scars_queries.coordlist_to_pyranges(HGMD_out_l, entryNames = ["Chromosome", "Start", "End", "Alt"])
+    HGMD_bed.Chromosome = ["chr" + str(chrom) for chrom in HGMD_bed.Chromosome]
 
-    out = HGMD_bed.filter(lambda x: x.chrom in chr_list)\
-                  .sort()
+    HGMD_bed = HGMD_bed[~HGMD_bed.as_df().duplicated()] # remove duplicates
+    out = HGMD_bed.sort()
      
     return out
 
 
+def filterForRegulatory(gr, annotation_table_fn):
+    import pandas as pd
+    import pyranges as pr
 
-# function that converts ClinVar vcf to pybedtool object
-# filters for: 1) snvs, 2) CLNSIG=="Pathogenic" or "Likely_pathogenic"
-def VCFtoBedTool_ClinVar(VCF_file, chr_list, clnsig_l):
-    from pysam import VariantFile
-    import pybedtools
+    annotation = pd.read_csv(annotation_table_fn, sep='\t')
+
+    correct_type = (annotation['mutype'] == 'regulatory')
+    regulatory_snvs_annotation = annotation[correct_type] 
+    regulatory_snvs_annotation['chrom'] = ["chr" + str(chrom) for chrom in regulatory_snvs_annotation['chrom']]
     
-    bcf_in = VariantFile(VCF_file)
-    ClinVar_out_l = []
-    for record in bcf_in.fetch():
-        is_snv = (record.info['CLNVC'] == "single_nucleotide_variant")                      # filter for snvs
-        is_p_or_lp = False if 'CLNSIG' not in record.info.keys()\
-                else (record.info['CLNSIG'][0] in clnsig_l)      # filter for clinical significance
-        if (is_snv and is_p_or_lp):
-            ClinVar_out_l += [(record.contig, record.start, record.stop)]
-    ClinVar_bed = pybedtools.BedTool(ClinVar_out_l)\
-                            .each(scars_queries.prepend_chr)
+    regulatory_snvs_annotation_unduplicated = regulatory_snvs_annotation[~regulatory_snvs_annotation[['chrom', 'pos','alt']].duplicated()]
 
-    out = ClinVar_bed.filter(lambda x: x.chrom in chr_list)\
-                     .sort()
+    filtered_snvs = pd.merge(gr.as_df(), regulatory_snvs_annotation_unduplicated, left_on=['Chromosome', 'End', 'Alt'],\
+        right_on=['chrom', 'pos','alt'], how='inner')
 
-    return out
+    return pr.PyRanges(filtered_snvs[['Chromosome', 'Start', 'End', 'Alt']])
 
 
-
-def get_non_coding_pathogenic(exon_flank, chr_list, genome, ensembl_ftp, hgmd_vcf, clinvar_vcf):
-    import pybedtools
-
-    exons = scars_queries.query_ensembl(ensembl_ftp, "exon", chr_list)
-    transcripts = scars_queries.query_ensembl(ensembl_ftp, "transcript", chr_list)
-    introns = transcripts.subtract(exons)
-
-    exons_extensions = exons.slop(b=exon_flank, genome=genome)\
-                            .intersect(introns)
-
-    hgmd_snvs = VCFtoBedTool_HGMD(hgmd_vcf, chr_list)
-    clinvar_snvs_p_or_lp = VCFtoBedTool_ClinVar(clinvar_vcf, chr_list, ['Pathogenic', 'Likely_pathogenic'])
-    clinvar_snvs_b_or_lb = VCFtoBedTool_ClinVar(clinvar_vcf, chr_list, ['Benign', 'Likely_benign'])
-
-    exclusion = exons.cat(*[exons_extensions, clinvar_snvs_b_or_lb])
-
-    out_mgd = hgmd_snvs.cat(clinvar_snvs_p_or_lp)\
-                       .subtract(exclusion)
-    out = pybedtools.BedTool().window_maker(b=out_mgd, w=1)
-
-    return out
