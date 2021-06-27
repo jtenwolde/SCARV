@@ -152,31 +152,32 @@ def query_sequence(gr, flank, genome, reference_fasta):
     chr_list = gr.Chromosome[~gr.Chromosome.duplicated()]       # unique chromosomes, but in order
 
     ix = 0
-    out = np.empty(shape=(gr.length, 2*flank+1, 4), dtype=np.int8)
+    out = np.empty(shape=(np.sum(2 * gr.lengths() - 1), 4*flank+1, 5), dtype=np.int8)
     for chrom in chr_list:
         chrom_gr = pr.from_dict({'Chromosome': [chrom], 'Start': [0], 'End': [genome[chrom][1]]})
         chrom_seq = pr.get_fasta(chrom_gr, reference_fasta)[0]
-        loci = gr[chrom].tile(1).Start
-    
-        seqs = [chrom_seq[(pos-flank):(pos+flank+1)] for pos in loci]
-        seqs_upper = [seq.upper() for seq in seqs]
-    
-        nucs = [list(seq) for seq in seqs_upper]
+
+        seqs = [chrom_seq[(pos.Start-flank):(pos.End+flank)] for pos in gr[chrom].as_df().itertuples()]
+        seqs_upper = ["X".join(seq.upper()) for seq in seqs]
+        seqs_upper_split = [[seq[i:(i+4*flank+1)] for i in np.arange(len(seq)-4*flank)] for seq in seqs_upper]
+        seqs_upper_flattened = [item for sublist in seqs_upper_split for item in sublist]
+
+        nucs = [list(seq) for seq in seqs_upper_flattened]
         nucs_df = pd.DataFrame(nucs)
 
         # one hot encode the sequences
-        nucs_cat = nucs_df.apply(lambda x: pd.Categorical(x, categories = ['A', 'C', 'G', 'T']))
+        nucs_cat = nucs_df.apply(lambda x: pd.Categorical(x, categories = ['A', 'C', 'X', 'G', 'T']))
         nucs_bin = pd.get_dummies(nucs_cat)
-        nucs_rshpd = np.array(nucs_bin, dtype=np.int8).reshape(nucs_bin.shape[0], 2*flank+1, 4) 
+        nucs_rshpd = np.array(nucs_bin, dtype=np.int8).reshape(nucs_bin.shape[0], 4*flank+1, 5) 
 
-        out[ix:(ix+len(loci))] = nucs_rshpd
-        ix += len(loci)
+        n_seqs = nucs_rshpd.shape[0]
+        out[ix:(ix+n_seqs)] = nucs_rshpd
+        ix += n_seqs
 
     return out
 
 
 
-# function that corrects the sequence queried, according to the major alleles found in the vcf
 def correct_refs(gr, snvs_pr, seq):
     import numpy as np
     import pandas as pd
@@ -196,16 +197,15 @@ def correct_refs(gr, snvs_pr, seq):
         gr_spl_hit_ids = gr_spl_on_snvs_hits.id
 
         nucs_df = pd.DataFrame(gr_spl_on_snvs_hits.ref)
-        nucs_cat = nucs_df.apply(lambda x: pd.Categorical(x, categories = ['A', 'C', 'G', 'T']))
+        nucs_cat = nucs_df.apply(lambda x: pd.Categorical(x, categories = ['A', 'C', 'X', 'G', 'T']))
         
         refs_from_vcf_ohe = np.array(pd.get_dummies(nucs_cat))
         seq[gr_spl_hit_ids, flank] = refs_from_vcf_ohe
      
     return 
+    
 
-
-
-def split_data(training_regions, chrXnonPAR, singleton_snvs, deletions, sequence, pop_split):
+def split_data(training_regions, chrXnonPAR, singleton_variants, sequence, pop_split):
     import numpy as np
     import pandas as pd
     import pyranges as pr
@@ -221,18 +221,16 @@ def split_data(training_regions, chrXnonPAR, singleton_snvs, deletions, sequence
     training_sites = training_sites[training_sites.Chromosome != "chrY"]
     chrXnonPAR_id = training_sites.join(chrXnonPAR).id
 
-    neutral_singleton_snvs = singleton_snvs.join(training_sites)
-    neutral_deletions = deletions.join(training_sites)
+    neutral_singleton_variants = singleton_variants.join(training_sites)
 
-    AC = np.array(neutral_singleton_snvs.ac, dtype=int)
+    AC = np.array(neutral_singleton_variants.ac, dtype=int)
     AC_skew = np.random.binomial(n=AC, p=0.6)                       # 60% of alternates dedicated to skewed splits
     AC_bal = AC - AC_skew                                           # remaining 40% to balanced split
 
     AN = np.repeat(2 * (pop_split['XY'] + pop_split['XX']), n_sites)    # In abuse of notation, AN refers to reference allele count 
     AN[chrXnonPAR_id] = pop_split['XY'] + 2 * pop_split['XX']
 
-    AN[neutral_singleton_snvs.id] = neutral_singleton_snvs.an - 1   # -1 due to singleton
-    AN[neutral_deletions.id] -= neutral_deletions.ac
+    AN[neutral_singleton_variants.id] = neutral_singleton_variants.an - 1   # -1 due to singleton
 
     AN_skew = np.random.binomial(AN, p=0.6)                         # 60% of references dedicated to skewed splits
     AN_rem = AN - AN_skew
@@ -244,11 +242,11 @@ def split_data(training_regions, chrXnonPAR, singleton_snvs, deletions, sequence
     N_cal = np.random.binomial(N_skew, p=2/3)                       # 2:1 split in calibration set versus test set
     N_test = N_skew - N_cal
 
-    alts_ohe = np.array(pd.get_dummies(neutral_singleton_snvs.alt))
+    alts_ohe = np.array(pd.get_dummies(pd.Categorical(neutral_singleton_variants.alt, categories = ['A', 'C', 'X', 'G', 'T'])))
     refs_ohe = sequence[:,flank,:]
     nuc = np.concatenate([refs_ohe, alts_ohe])
 
-    indices = np.concatenate((np.arange(n_sites), neutral_singleton_snvs.id), axis=0)
+    indices = np.concatenate((np.arange(n_sites), neutral_singleton_variants.id), axis=0)
 
     return indices, nuc, np.c_[N_bal, N_cal, N_test]
 

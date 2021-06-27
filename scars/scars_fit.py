@@ -17,6 +17,7 @@ def prep_data(indices, y, multiplier, seq_in, expand=False):
         return seq_out, y_out, weight_out
 
 
+
 def fit_cnn(X, y):
     import keras
     import numpy as np
@@ -52,7 +53,7 @@ def create_cnn(flank):
 
     model = keras.models.Sequential()
 
-    model.add(keras_genomics.layers.RevCompConv1D(filters=100, kernel_size=5, input_shape=(2*flank+1, 4), 
+    model.add(keras_genomics.layers.RevCompConv1D(filters=100, kernel_size=5, input_shape=(2*flank+1, 5), 
         padding="same", activation="relu", kernel_initializer="he_normal"))
 
     model.add(keras_genomics.layers.RevCompConv1D(filters=100, kernel_size=5, padding="same",
@@ -61,12 +62,25 @@ def create_cnn(flank):
     model.add(keras_genomics.layers.RevCompConv1D(filters=100, kernel_size=model.layers[-1].output_shape[1],
         activation="relu", kernel_initializer="he_normal"))
 
-    model.add(keras_genomics.layers.RevCompConv1D(filters=2, kernel_size=model.layers[-1].output_shape[1],
+    model.add(keras_genomics.layers.RevCompConv1D(filters=3, kernel_size=model.layers[-1].output_shape[1],
                 activation="softmax", kernel_initializer="he_normal"))
     
     model.add(keras.layers.Flatten())
 
+    model.add(keras.layers.Lambda(sum_middle_elements))
+
     return model
+
+
+
+def sum_middle_elements(x):
+    from keras import backend as K
+
+    A_and_C = x[:, 0:2,]
+    X = K.sum(x[:, 2:4], axis=1, keepdims=True)
+    G_and_T = x[:, 4:]
+    return K.concatenate([A_and_C, X, G_and_T], axis=1)
+
 
 
 def fit_calibration(model, seq, y, weights):

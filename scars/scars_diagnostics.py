@@ -105,7 +105,7 @@ def max_auc(preds, weights=None):
     if weights is None:
         weights = np.repeat(1, preds.shape[0])
 
-    output = np.empty(shape=(preds.shape[0], 4), dtype=int)
+    output = np.empty(shape=(preds.shape[0], 5), dtype=int)
 
     for i in range(preds.shape[0]):
         output[i,:] = np.random.multinomial(weights[i], preds[i,:], size=1)

@@ -114,6 +114,37 @@ def match_scores_to_ranges(gr, gr_reliable_mgd, obs_reliable_flat, exp_reliable_
     return out
 
 
+
+def process_variants (variants, allele_counts, insertion=False):
+    import pandas as pd
+    import numpy as np
+
+    df = variants.as_df()
+    df = df.set_index('Start')
+
+    df.alt = pd.Categorical(df.alt, categories=['A','C','X','G','T'])
+    df.ref = pd.Categorical(df.ref, categories=['A','C','X','G','T'])
+
+    alternate_alleles = pd.get_dummies(df.alt).mul(df.ac, axis=0)\
+                                                   .groupby('Start')\
+                                                   .sum()\
+                                                   .to_numpy()
+
+    reference_alleles = pd.get_dummies(df.ref).mul(df.an, axis=0)\
+                                                   .groupby('Start')\
+                                                   .first()\
+                                                   .to_numpy()
+
+    reference_alleles -= np.sum(alternate_alleles, axis=1)[:, np.newaxis]
+    reference_alleles[reference_alleles < 0] = 0
+
+    increment = 1 if insertion else 0
+    allele_counts[2 * np.unique(df.index) + increment] = reference_alleles + alternate_alleles
+
+    return allele_counts
+
+
+
 def toPercentile(scores, percentiles):
     import pandas as pd
     import numpy as np
@@ -126,5 +157,64 @@ def toPercentile(scores, percentiles):
 
     percentiles = pd.cut(scores, bins=percentiles, labels=np.arange(0.1,100.1,0.1), include_lowest=True)
     return percentiles
+
+
+
+def percScoreToCumulativePercCountPlot(percScore, plt=None, x_upper=None, dashed=False):
+    cumulativeCounts = getCumulativeCounts(percScore)
+    plt = plotCumulativePercCountPlot(cumulativeCounts, plt, x_upper, dashed)
+
+    return plt
+
+
+
+def getCumulativeCounts(percentile_values):
+    import collections
+    import numpy as np
+
+    percentileTally = collections.Counter([int(10*x) for x in percentile_values])
+    addMissingPercentiles(percentileTally)
+
+    counts = [count for perc, count in sorted(percentileTally.items())]
+    countsCumulative = np.cumsum(counts)
+
+    return countsCumulative
+
+
+
+def plotCumulativePercCountPlot(countsCumulative, plt=None, x_upper=None, dashed=False):
+    import numpy as np
+
+    percentiles = np.arange(0, 100.1, 0.1)
+
+    if dashed:
+        plt.plot(percentiles, countsCumulative, '--', linewidth=3)
+    else:
+        plt.plot(percentiles, countsCumulative, linewidth=3)
+
+    plt.set_xlabel("Percentile", fontsize=23)
+    plt.set_ylabel("Cumulative count", fontsize=23)
+
+    plt.set_ylim(0, 1.1 * countsCumulative[-1])
+
+    if x_upper is not None:
+        plt.set_xlim(0, x_upper)
+        plt.set_ylim(0, 1.1 * max([line.get_ydata()[x_upper * 10 - 1] for line in plt.lines]))
+
+    return plt
+
+
+
+def addMissingPercentiles(percentileCountDictionary):
+    import numpy as np
+
+    percentileSetComplete = set(np.arange(0, 1001, 1))
+    percentilesPresent = set(percentileCountDictionary.keys())
+    
+    toAdd = percentileSetComplete - percentilesPresent
+    for i in list(toAdd):
+        percentileCountDictionary[i] = 0
+
+    return None
 
 
