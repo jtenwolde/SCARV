@@ -68,7 +68,7 @@ import os
 import numpy as np
 import pandas as pd
 import random
-from scars import scars_assess
+from scarv import scarv_assess
 import sys
 import pyranges as pr
 import pybedtools

@@ -1,6 +1,6 @@
 # script to fit classification model
 
-from scars import scars_classifier, scars_queries, scars_assess
+from scarv import scarv_classifier, scarv_queries, scarv_assess
 from sklearn.metrics import roc_auc_score, roc_curve
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -44,7 +44,7 @@ patho_SNVs_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeli
 patho_SNVs = pr.read_bed(patho_SNVs_fn)
 patho_SNVs.columns = ['Chromosome', 'Start', 'End', 'Alt']
 
-patho_SNVs_annotated = scars_classifier.load_data(patho_SNVs, patho_SNVs_fn, score_annotation_fns, gene_annotation_fns)
+patho_SNVs_annotated = scarv_classifier.load_data(patho_SNVs, patho_SNVs_fn, score_annotation_fns, gene_annotation_fns)
 
 benign_SNVs_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/variants/gnomAD_hg38_covered_SNVs_AFgt0p01_AFRandNFE.bed"
 benign_SNVs = pr.read_bed(benign_SNVs_fn)
@@ -53,10 +53,10 @@ benign_SNVs.columns = ['Chromosome', 'Start', 'End', 'Ref', 'Alt']
 
 ratio = 15
 
-matched_benign_SNVs = scars_classifier.query_matching_variants(patho_SNVs, benign_SNVs, ratio, genome_segmentation, SpliceSites)
+matched_benign_SNVs = scarv_classifier.query_matching_variants(patho_SNVs, benign_SNVs, ratio, genome_segmentation, SpliceSites)
 matched_benign_SNVs_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/variants/matched_benign_SNVs_ratio" + str(ratio) + ".bed"
-scars_queries.writeToBed(matched_benign_SNVs, matched_benign_SNVs_fn)
-matched_benign_SNVs_annotated = scars_classifier.load_data(matched_benign_SNVs, matched_benign_SNVs_fn, score_annotation_fns, gene_annotation_fns)
+scarv_queries.writeToBed(matched_benign_SNVs, matched_benign_SNVs_fn)
+matched_benign_SNVs_annotated = scarv_classifier.load_data(matched_benign_SNVs, matched_benign_SNVs_fn, score_annotation_fns, gene_annotation_fns)
 
 patho_SNV_data = patho_SNVs_annotated.as_df().drop(['Chromosome', 'Start', 'End', 'Alt'], 1)
 patho_SNV_data['pathogenic'] = 1

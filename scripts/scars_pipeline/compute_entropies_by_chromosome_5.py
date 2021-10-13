@@ -1,4 +1,4 @@
-from scars import *
+from scarv import *
 
 import pybedtools
 import pyranges as pr
@@ -22,9 +22,9 @@ k = 25
 genome = pybedtools.genome_registry.hg38
 reference_fasta = "/rds/project/who1000-1/rds-who1000-cbrc/ref/UCSC/hg38/hg38.fa"
 
-snvs = scars_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry +"/variants/snvs_by_chr/pass_snvs_" + chrom_base + ".bed")
+snvs = scarv_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry +"/variants/snvs_by_chr/pass_snvs_" + chrom_base + ".bed")
 
-deletions = scars_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry +"/variants/pass_deletions.bed")[chrom_base]
+deletions = scarv_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry +"/variants/pass_deletions.bed")[chrom_base]
 deletions.ref = deletions.ref.str.slice(1)
 deletions.alt = "X"
 deletions = deletions[deletions.ref.str.len() == 1]
@@ -33,7 +33,7 @@ deletions = deletions[deletions.lengths() == 1]
 
 snvs_and_deletions = pr.PyRanges(pd.concat([snvs.as_df(), deletions.as_df()]))
 
-insertions = scars_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry +"/variants/pass_insertions.bed")[chrom_base]
+insertions = scarv_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry +"/variants/pass_insertions.bed")[chrom_base]
 insertions.ref = "X"
 insertions.alt = insertions.alt.str.slice(1)
 insertions = insertions[insertions.alt.str.len() == 1]
@@ -67,18 +67,18 @@ preds[query_indices] = preds_by_kmer.loc[k_mers[query_indices]].to_numpy()
 # Compute chromosome-wide allele frequencies
 allele_counts = 2 * pop_size * chrom_seq_ohe.astype('int32')
 
-allele_counts = scars_assess.process_variants (insertions, allele_counts, insertion=True)
-allele_counts = scars_assess.process_variants (snvs_and_deletions, allele_counts, insertion=False)
+allele_counts = scarv_assess.process_variants (insertions, allele_counts, insertion=True)
+allele_counts = scarv_assess.process_variants (snvs_and_deletions, allele_counts, insertion=False)
 
 allele_counts[np.setdiff1d(np.arange(allele_counts.shape[0]), query_indices)] = 0   # remove contribution from unreliable or unidentified sequences
 allele_frequencies = allele_counts / allele_counts.sum(axis=1)[:, np.newaxis]
 
 
 # Generate score
-observed_entropy = scars_assess.get_entropy(allele_frequencies)
+observed_entropy = scarv_assess.get_entropy(allele_frequencies)
 observed_entropy_sliding = np.convolve(observed_entropy, [1] * 2 * window_size, 'same')[::2]
 
-predicted_entropy = scars_assess.get_entropy(preds)
+predicted_entropy = scarv_assess.get_entropy(preds)
 predicted_entropy_sliding = np.convolve(predicted_entropy, [1] * 2 * window_size, 'same')[::2]
 
 coverage_indicator = np.zeros(2*genome[chrom_base][1]-1, dtype=np.uint8)

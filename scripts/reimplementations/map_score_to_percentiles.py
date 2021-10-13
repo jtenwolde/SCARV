@@ -1,4 +1,4 @@
-from scars import scars_assess
+from scarv import scarv_assess
 import pandas as pd
 import numpy as np
 import os

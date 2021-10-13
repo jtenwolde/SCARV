@@ -1,5 +1,5 @@
 # MK regions exploration
-from scars import *
+from scarv import *
 
 import matplotlib.pyplot as plt
 import pyranges as pr
@@ -21,7 +21,7 @@ chr_indices = np.where(["chr" in x for x in scores_raw])[0]
 scores_raw_split = [scores_raw[chr_indices[i]:chr_indices[i+1]] for i in np.arange(len(chr_indices)-1)]
 scores = [sublist + [np.nan] if len(sublist)==3 else sublist for sublist in scores_raw_split]
 
-scores_gr = scars_queries.coordlist_to_pyranges(scores, ["Chromosome", "Start", "End", "SCARS_clf"])
+scores_gr = scarv_queries.coordlist_to_pyranges(scores, ["Chromosome", "Start", "End", "SCARS_clf"])
 scores_gr.SCARS_clf = scores_gr.SCARS_clf.astype(float)
 
 MK_regions_split_annot = MK_regions_split.join(scores_gr)
@@ -38,7 +38,7 @@ BPD_genes = pd.read_csv("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/clas
 BPD_genes = BPD_genes.rename(columns={1: "gene_name"})
 
 ensembl_ftp = "ftp://ftp.ensembl.org/pub/release-100/gtf/homo_sapiens/Homo_sapiens.GRCh38.100.gtf.gz"
-ensembl_genes = scars_queries.query_ensembl(ensembl_ftp, "gene")
+ensembl_genes = scarv_queries.query_ensembl(ensembl_ftp, "gene")
 
 ensembl_genes.gene_name = [str_spl[5] for str_spl in ensembl_genes.attributes.str.split('"')]
 ensembl_genes = ensembl_genes[['gene_name']]

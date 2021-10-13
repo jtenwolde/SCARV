@@ -3,7 +3,7 @@ def get_observed_and_expected_singletons(gr, snvs, cnn, calibration_model, refer
     import numpy as np
     import pandas as pd
     import pyranges as pr
-    from scars import scars_assess
+    from scarv import scarv_assess
 
     max_window_size = gr.lengths()[0]
     flank = cnn.input_shape[1]//2
@@ -53,7 +53,7 @@ def get_observed_and_expected_singletons(gr, snvs, cnn, calibration_model, refer
 
         relevant_k_mers = k_mers[relevant_indices - min_ix]
         relevant_preds_balanced = cnn.predict(relevant_k_mers)
-        relevant_preds_calibrated = scars_assess.calibrate(np.log(relevant_preds_balanced), calibration_model, relevant_k_mers)
+        relevant_preds_calibrated = scarv_assess.calibrate(np.log(relevant_preds_balanced), calibration_model, relevant_k_mers)
         relevant_p_alts = np.sum(relevant_preds_calibrated * (1 - relevant_k_mers[:,flank,:]), axis=1)
 
         print('done with predicting')
@@ -74,7 +74,7 @@ def get_observed_and_expected_singletons(gr, snvs, cnn, calibration_model, refer
 
 
 import pyranges as pr
-from scars import *
+from scarv import *
 import numpy as np
 import pandas as pd
 from keras.models import load_model
@@ -98,9 +98,9 @@ calibration_model = joblib.load(calibration_file)
 
 reliable_sites = pr.read_bed("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/quality_filtering/reliable_sites.bed")
 training_loci = pr.read_bed("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/training_sites/training_loci.bed")
-singletons = scars_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/variants/pass_singleton_snvs.bed")
+singletons = scarv_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/variants/pass_singleton_snvs.bed")
 
-training_loci_subsample = scars_queries.sample_loci_from_pr(training_loci, n_loci)
+training_loci_subsample = scarv_queries.sample_loci_from_pr(training_loci, n_loci)
 training_loci_extd = training_loci_subsample.slack(half_ws)
 
 obs_by_site, exp_by_site = get_observed_and_expected_singletons(training_loci_extd, singletons, cnn, calibration_model, reference_fasta)

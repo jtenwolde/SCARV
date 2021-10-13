@@ -2,7 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import random
-from scars import scars_assess
+from scarv import scarv_assess
 import sys
 
 ancestry = sys.argv[1] 
@@ -89,7 +89,7 @@ for chrom in chr_list:
     outFile = track_folder + "scars_percentiles_" + chrom + ".bed.gz"
 
     df = pd.read_csv(inFile, sep='\t', header=None, names=["Chromosome", "Start", "End", "Scars", "Coverage"])  
-    df['Percentile'] = scars_assess.toPercentile(df['Scars'], SCARS_percentiles)
+    df['Percentile'] = scarv_assess.toPercentile(df['Scars'], SCARS_percentiles)
 
     df.to_csv(outFile, sep='\t', columns=["Chromosome", "Start", "End", "Percentile"], index=False, header=False, compression='gzip')
 

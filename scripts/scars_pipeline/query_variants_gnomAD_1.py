@@ -1,4 +1,4 @@
-from scars import *
+from scarv import *
 
 import numpy as np
 import pandas as pd
@@ -20,15 +20,15 @@ pass_indels_query = {'variant_type': "indel", 'ancestry': ancestry, 'PASS': True
 fail_vars_query = {'variant_type': None, 'ancestry': ancestry, 'PASS': False}
 
 queries = [pass_snvs_query, pass_indels_query, fail_vars_query]
-data_dict = scars_queries.query_vcf(gnomad_vcf, queries)
+data_dict = scarv_queries.query_vcf(gnomad_vcf, queries)
 
-pass_snvs = scars_queries.coordlist_to_pyranges(data_dict[0], entryNames=["Chromosome", "Start", "End", "ref", "alt", "ac", "an"])
-pass_indels = scars_queries.coordlist_to_pyranges(data_dict[1], entryNames=["Chromosome", "Start", "End", "ref", "alt", "ac", "an"])
-fail_vars = scars_queries.coordlist_to_pyranges(data_dict[2], entryNames=["Chromosome", "Start", "End", "ref", "alt", "ac", "an"])
+pass_snvs = scarv_queries.coordlist_to_pyranges(data_dict[0], entryNames=["Chromosome", "Start", "End", "ref", "alt", "ac", "an"])
+pass_indels = scarv_queries.coordlist_to_pyranges(data_dict[1], entryNames=["Chromosome", "Start", "End", "ref", "alt", "ac", "an"])
+fail_vars = scarv_queries.coordlist_to_pyranges(data_dict[2], entryNames=["Chromosome", "Start", "End", "ref", "alt", "ac", "an"])
 
 # the vcf query flips ref & alt for minor alleles with MAF > 0.5, which requires adjustments in the case of multiallelicism
-corrected_inverted_multiallelics = scars_snv_correction.correct_inverted_multiallelics(pass_snvs)
-corrected_pass_snvs = scars_snv_correction.insert_corrected_snvs(corrected_inverted_multiallelics, pass_snvs)
+corrected_inverted_multiallelics = scarv_snv_correction.correct_inverted_multiallelics(pass_snvs)
+corrected_pass_snvs = scarv_snv_correction.insert_corrected_snvs(corrected_inverted_multiallelics, pass_snvs)
 
 corrected_pass_snvs.ac = corrected_pass_snvs.ac.astype(int)
 corrected_pass_snvs.an = corrected_pass_snvs.an.astype(int)
@@ -43,10 +43,10 @@ pass_insertions.an = pass_insertions.an.astype(int)
 
 fail_snvs_and_deletions = fail_vars[fail_vars.alt.str.len() == 1]
 
-scars_queries.write_to_bed(corrected_pass_snvs, outFileSNVs)
-scars_queries.write_to_bed(pass_deletions, outFileDeletions)
-scars_queries.writeToBed(pass_insertions, outFileInsertions)
-scars_queries.write_to_bed(fail_snvs_and_deletions, outFileFAILVariants)
+scarv_queries.write_to_bed(corrected_pass_snvs, outFileSNVs)
+scarv_queries.write_to_bed(pass_deletions, outFileDeletions)
+scarv_queries.writeToBed(pass_insertions, outFileInsertions)
+scarv_queries.write_to_bed(fail_snvs_and_deletions, outFileFAILVariants)
 
 
 

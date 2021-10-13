@@ -1,4 +1,4 @@
-from scars import *
+from scarv import *
 
 import numpy as np
 import pandas as pd
@@ -22,7 +22,7 @@ gnomad_coverage_tsv = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/gnomad
 ensembl_ftp = "ftp://ftp.ensembl.org/pub/release-100/gtf/homo_sapiens/Homo_sapiens.GRCh38.100.gtf.gz"
 
 
-pass_snvs = scars_queries.load_variants(inFileSNVs)
+pass_snvs = scarv_queries.load_variants(inFileSNVs)
 
 chrXnonPAR = pr.from_dict({"Chromosome": ['chrX', 'chrX'], 
 	"Start": [0, 2781479], "End": [10001, 155701383]})
@@ -34,7 +34,7 @@ pass_nonsingletons_chrXnonPAR = pass_snvs_chrXnonPAR[pass_snvs_chrXnonPAR.ac/pas
 pass_nonsingleton_snvs = pr.PyRanges(pd.concat([pass_nonsingletons_autosomes_and_chrXPAR.as_df(), pass_nonsingletons_chrXnonPAR.as_df()], ignore_index=True))
 
 
-pass_deletions = scars_queries.load_variants(inFileDeletions)
+pass_deletions = scarv_queries.load_variants(inFileDeletions)
 
 pass_deletions.Start += 1
 pass_deletions.alt = "X" 
@@ -58,11 +58,11 @@ pass_nonsingleton_variants = pr.PyRanges(pd.concat([pass_nonsingleton_snvs.as_df
 non_training_variants = pr.PyRanges(pd.concat([pass_nonsingleton_variants.as_df(), pass_singleton_deletions_not_1bp.as_df()], ignore_index=True))
 
 
-fail_variants = scars_queries.load_variants(inFileFAILVariants)
+fail_variants = scarv_queries.load_variants(inFileFAILVariants)
 
-reliable_sites = scars_queries.get_reliable_sites(gnomad_coverage_tsv, fail_variants, pop_split)
+reliable_sites = scarv_queries.get_reliable_sites(gnomad_coverage_tsv, fail_variants, pop_split)
 reliable_sites = reliable_sites[reliable_sites.Chromosome != "chrY"]
-scars_queries.writeToBed(reliable_sites, outFileReliableSites)
+scarv_queries.writeToBed(reliable_sites, outFileReliableSites)
 
-training_loci = scars_queries.get_training_loci(reliable_sites, phyloP_bw, ensembl_ftp, non_training_variants)
-scars_queries.writeToBed(training_loci, outFileTrainingLoci)
+training_loci = scarv_queries.get_training_loci(reliable_sites, phyloP_bw, ensembl_ftp, non_training_variants)
+scarv_queries.writeToBed(training_loci, outFileTrainingLoci)

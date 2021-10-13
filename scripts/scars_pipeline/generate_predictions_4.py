@@ -1,4 +1,4 @@
-from scars import *
+from scarv import *
 import numpy as np
 import pandas as pd
 import itertools 
@@ -29,7 +29,7 @@ nucs_bin = pd.get_dummies(nucs_cat)
 k_mers_ohe = np.array(nucs_bin, dtype=np.int8).reshape(nucs_bin.shape[0], 2*k-1, 5) 
 
 preds_uncalibrated_snv_del = cnn.predict(k_mers_ohe)
-preds_calibrated_snv_del = scars_assess.calibrate(preds_uncalibrated_snv_del, calibration_model_snv_del, k_mers_ohe)
+preds_calibrated_snv_del = scarv_assess.calibrate(preds_uncalibrated_snv_del, calibration_model_snv_del, k_mers_ohe)
 preds_by_kmer_snv_del = pd.DataFrame(preds_calibrated_snv_del, index=k_mers, columns=['p_A', 'p_C', 'p_X', 'p_G', 'p_T'])
 
 
@@ -43,7 +43,7 @@ nucs_bin = pd.get_dummies(nucs_cat)
 k_mers_ohe = np.array(nucs_bin, dtype=np.int8).reshape(nucs_bin.shape[0], 2*k-1, 5) 
 
 preds_uncalibrated_ins = cnn.predict(k_mers_ohe)
-preds_calibrated_ins = scars_assess.calibrate(preds_uncalibrated_ins, calibration_model_ins, k_mers_ohe)
+preds_calibrated_ins = scarv_assess.calibrate(preds_uncalibrated_ins, calibration_model_ins, k_mers_ohe)
 preds_by_kmer_ins = pd.DataFrame(preds_calibrated_ins, index=k_mers, columns=['p_A', 'p_C', 'p_X', 'p_G', 'p_T'])
 
 preds_by_kmer = pd.concat([preds_by_kmer_snv_del, preds_by_kmer_ins])

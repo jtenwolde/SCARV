@@ -1,4 +1,4 @@
-from scars import scars_classifier, scars_queries, scars_assess
+from scarv import scarv_classifier, scarv_queries, scarv_assess
 from sklearn.metrics import roc_auc_score, roc_curve
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -54,8 +54,8 @@ patho_SNVs_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeli
 patho_SNVs = pr.read_bed(patho_SNVs_fn)
 patho_SNVs.columns = ['Chromosome', 'Start', 'End', 'Alt']
 
-patho_SNVs_annotated = scars_classifier.load_data(patho_SNVs, patho_SNVs_fn, score_annotation_fns, gene_annotation_fns)
-patho_SNVs_competing_scores = scars_classifier.load_data(patho_SNVs, patho_SNVs_fn, competing_score_annotation_fns)
+patho_SNVs_annotated = scarv_classifier.load_data(patho_SNVs, patho_SNVs_fn, score_annotation_fns, gene_annotation_fns)
+patho_SNVs_competing_scores = scarv_classifier.load_data(patho_SNVs, patho_SNVs_fn, competing_score_annotation_fns)
 
 benign_SNVs_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/variants/gnomAD_hg38_covered_SNVs_AFgt0p01_AFRandNFE.bed"
 benign_SNVs = pr.read_bed(benign_SNVs_fn)
@@ -66,10 +66,10 @@ ncER_training_SNVs = pr.read_bed("/rds/project/who1000-1/rds-who1000-cbrc/user/j
 
 ratio = 15
 
-matched_benign_SNVs = scars_classifier.query_matching_variants(patho_SNVs, benign_SNVs, ratio, genome_segmentation, SpliceSites)
+matched_benign_SNVs = scarv_classifier.query_matching_variants(patho_SNVs, benign_SNVs, ratio, genome_segmentation, SpliceSites)
 matched_benign_SNVs_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/variants/matched_benign_SNVs_ratio" + str(ratio) + ".bed"
-scars_queries.writeToBed(matched_benign_SNVs, matched_benign_SNVs_fn)
-matched_benign_SNVs_annotated = scars_classifier.load_data(matched_benign_SNVs, matched_benign_SNVs_fn, score_annotation_fns, gene_annotation_fns)
+scarv_queries.writeToBed(matched_benign_SNVs, matched_benign_SNVs_fn)
+matched_benign_SNVs_annotated = scarv_classifier.load_data(matched_benign_SNVs, matched_benign_SNVs_fn, score_annotation_fns, gene_annotation_fns)
 
 ncER_train_overlap = patho_SNVs_annotated.join(ncER_training_SNVs, how='left')
 ncER_train_indicator = (ncER_train_overlap.Start_b != -1).astype(np.int8).to_numpy()
@@ -96,7 +96,7 @@ Pos = data_shuffled[['Chromosome', 'End']].reset_index(drop=True)
 random_loci_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/competing_tracks/ncER/ncER_1bp/ncER_random_loci_1_in_30k.bed"
 random_loci = pr.read_bed(random_loci_fn)
 random_loci = random_loci[random_loci.Chromosome!="chrY"]
-random_loci_data = scars_classifier.load_data(random_loci, random_loci_fn, score_annotation_fns, gene_annotation_fns)
+random_loci_data = scarv_classifier.load_data(random_loci, random_loci_fn, score_annotation_fns, gene_annotation_fns)
 X_random = random_loci_data.as_df().drop(['Chromosome', 'Start', 'End'], 1)
 
 
@@ -120,7 +120,7 @@ for i in range(k):
 
     preds_test = clf.predict_proba(X_non_ncER_training[Y_non_ncER_training==1])[:,1]
     percentiles = np.quantile(preds_random, np.arange(0, 1.001, 0.001))
-    percentiles_test = scars_assess.toPercentile(preds_test, percentiles)
+    percentiles_test = scarv_assess.toPercentile(preds_test, percentiles)
 
     df_fold = pd.concat([Pos_non_ncER_training.loc[Y_non_ncER_training==1].reset_index(drop=True), pd.DataFrame(percentiles_test)],1)
     df_fold.columns = ['Chromosome', 'End', 'SCARS_clf']
@@ -146,11 +146,11 @@ import matplotlib.pyplot as plt
 
 fig, axs = plt.subplots(1, 2, figsize=(10,5))
 
-scars_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['SCARS_clf'], axs[0])
-scars_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['ncER'], axs[0])
+scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['SCARS_clf'], axs[0])
+scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['ncER'], axs[0])
 
-scars_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['SCARS_clf'], axs[1], 5)
-scars_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['ncER'], axs[1], 5)
+scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['SCARS_clf'], axs[1], 5)
+scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['ncER'], axs[1], 5)
 
 fig.tight_layout()
 axs[0].legend(['SCARS-clf', 'ncER'], loc="lower center")

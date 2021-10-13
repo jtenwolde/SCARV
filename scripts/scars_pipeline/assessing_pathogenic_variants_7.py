@@ -5,7 +5,7 @@ import sys
 import math
 import matplotlib.pyplot as plt
 import numpy as np
-from scars import *
+from scarv import *
 
 outFile = sys.argv[1]
 
@@ -18,8 +18,8 @@ hgmd_annotation = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipe
 hgmd_pathogenic_snv_file = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/non_coding_pathogenic_variants/noncoding_pathogenic_HGMD_Regulatory_DM_DM?_8bpFromSplice_hg38_sorted.bed"
 snvs_annot_by_all_file = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/non_coding_pathogenic_variants/noncoding_pathogenic_positions_HGMD_Regulatory_DM_DM?_8bpFromSplice_hg38_sorted_annot_by_all_scores.bed"
 
-non_coding_patho_snvs = scars_noncoding.getNonCodingPathogenic(exon_flank, ensembl_ftp, hgmd_vcf, hgmd_annotation)
-scars_queries.writeToBed(non_coding_patho_snvs, hgmd_pathogenic_snv_file)
+non_coding_patho_snvs = scarv_noncoding.getNonCodingPathogenic(exon_flank, ensembl_ftp, hgmd_vcf, hgmd_annotation)
+scarv_queries.writeToBed(non_coding_patho_snvs, hgmd_pathogenic_snv_file)
 
 SCARS_track = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/scars_tracks/scars_hg38_incl_1bp_indels_autosomes.bed.gz"
 CDTS_track = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/reimplementing_CDTS_gnomad_hg38/CDTS/CDTS_diff_perc_coordsorted_autosomes_gnomAD_N32299_hg38.bed.gz"
@@ -50,7 +50,7 @@ CADD_samples_raw = os.popen("zcat " + CADD_track + " | grep -v '#' - | awk -v se
 CADD_samples = list(map(float, CADD_samples_raw))
 CADD_percentiles = np.quantile(CADD_samples, np.arange(0, 1.001, 0.001))
 
-CADD_percentile_scores = scars_assess.toPercentile(CADD_scores, CADD_percentiles)
+CADD_percentile_scores = scarv_assess.toPercentile(CADD_scores, CADD_percentiles)
 CADD_percentile_scores_inv = [100-float(x) for x in CADD_percentile_scores]
 
 
@@ -75,15 +75,15 @@ axs[1].tick_params(axis='both', which='major', labelsize=15)
 axs[0].grid()
 axs[1].grid()
 
-scars_assess.percScoreToCumulativePercCountPlot(SCARS_corrected, axs[0])
-scars_assess.percScoreToCumulativePercCountPlot(CDTS_corrected, axs[0])
-scars_assess.percScoreToCumulativePercCountPlot(Orion_corrected, axs[0])
-scars_assess.percScoreToCumulativePercCountPlot(CADD_corrected, axs[0], dashed=True)
+scarv_assess.percScoreToCumulativePercCountPlot(SCARS_corrected, axs[0])
+scarv_assess.percScoreToCumulativePercCountPlot(CDTS_corrected, axs[0])
+scarv_assess.percScoreToCumulativePercCountPlot(Orion_corrected, axs[0])
+scarv_assess.percScoreToCumulativePercCountPlot(CADD_corrected, axs[0], dashed=True)
 
-scars_assess.percScoreToCumulativePercCountPlot(SCARS_corrected, axs[1], 5)
-scars_assess.percScoreToCumulativePercCountPlot(CDTS_corrected, axs[1], 5)
-scars_assess.percScoreToCumulativePercCountPlot(Orion_corrected, axs[1], 5)
-scars_assess.percScoreToCumulativePercCountPlot(CADD_corrected, axs[1], 5, dashed=True)
+scarv_assess.percScoreToCumulativePercCountPlot(SCARS_corrected, axs[1], 5)
+scarv_assess.percScoreToCumulativePercCountPlot(CDTS_corrected, axs[1], 5)
+scarv_assess.percScoreToCumulativePercCountPlot(Orion_corrected, axs[1], 5)
+scarv_assess.percScoreToCumulativePercCountPlot(CADD_corrected, axs[1], 5, dashed=True)
 
 fig.tight_layout()
 fig.subplots_adjust(bottom=0.28)
