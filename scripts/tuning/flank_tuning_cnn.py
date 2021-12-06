@@ -60,7 +60,7 @@ genome = pybedtools.genome_registry.hg38
 chrXnonPAR = pr.from_dict({"Chromosome": ['chrX', 'chrX'], "Start": [0, 2781479], "End": [10001, 155701383]})
 reference_fasta = "/rds/project/who1000-1/rds-who1000-cbrc/ref/UCSC/hg38/hg38.fa"
 
-project_folder = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/"
+project_folder = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry + "/"
 singleton_snvs = scarv_queries.load_variants(project_folder + "variants/pass_singleton_snvs.bed")
 singleton_deletions = scarv_queries.load_variants(project_folder + "variants/pass_singleton_1bp_deletions.bed")
 singleton_snvs_and_deletions = pr.PyRanges(pd.concat([singleton_snvs.as_df(), singleton_deletions.as_df()], ignore_index=True))

@@ -10,7 +10,7 @@ mkdir trinucs
 
 for chr in {1..22}
 do
-awk -v chrom="chr"${chr} '$1==chrom' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/quality_filtering/reliable_sites.bed |\
+awk -v chrom="chr"${chr} '$1==chrom' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/quality_filtering/reliable_sites.bed |\
     bedops --chop 1 - | bedops --range 1 --everything - | bedtools getfasta -tab -fi /rds/project/who1000-1/rds-who1000-cbrc/ref/UCSC/hg38/hg38.fa -bed stdin -fo stdout |\
     awk -F[":-"] '{print $1,$2,toupper($3)}' OFS='\t' - > trinucs/reliable_trinucs_chr${chr}.bed &
 done 
@@ -46,7 +46,7 @@ do
         awk -v sld=$sliding -v wd=$window 'BEGIN{OFS=FS="\t"}{for(i=0; i<=($2); i=i+sld) {stt=i;end=i+wd; print $1, stt,end}}' | \
         bedmap --echo --bases --sum --sci - <(cut -f1-3,4-5 annot_with_rate/reliable_trinucs_chr${chr}_annot_incl_rate.bed | bedops --range -1 --everything  -) | \
         sed 's/|/\t/g' | awk -v wd=$window 'BEGIN{FS=OFS="\t"}{if ($4 >= wd*0.9) print $0}' | \
-        ipython calculate_Orion.py $pop_size "chr"$chr /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/variants/pass_snvs_ac_by_chr/ac_by_pos_chr${chr}.txt > Orion/Orion_chr${chr}.bed & 
+        ipython calculate_Orion.py $pop_size "chr"$chr /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/variants/pass_snvs_ac_by_chr/ac_by_pos_chr${chr}.txt > Orion/Orion_chr${chr}.bed & 
 done
 
 # map to percentiles with python script

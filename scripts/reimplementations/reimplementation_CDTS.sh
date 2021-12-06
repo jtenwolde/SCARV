@@ -13,18 +13,18 @@ mkdir heptamers
 
 for chr in {1..22}
 do
-awk -v chrom="chr"${chr} '$1==chrom' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/quality_filtering/reliable_sites.bed |\
+awk -v chrom="chr"${chr} '$1==chrom' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/quality_filtering/reliable_sites.bed |\
     bedops --chop 1 - | bedops --range 3 --everything - | bedtools getfasta -tab -fi /rds/project/who1000-1/rds-who1000-cbrc/ref/UCSC/hg38/hg38.fa -bed stdin -fo stdout |\
     awk -F[":-"] '{print $1,$2,toupper($3)}' OFS='\t' - | bedops --range -3 --everything - > heptamers/reliable_heptamers_chr${chr}.bed &
 done 
 
 chr=XPAR
-awk '$1=="chrX"' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/quality_filtering/reliable_sites.bed |\
+awk '$1=="chrX"' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/quality_filtering/reliable_sites.bed |\
     bedops --intersect - hg38_chrXPAR.bed | bedops --chop 1 - | bedops --range 3 --everything - | bedtools getfasta -tab -fi /rds/project/who1000-1/rds-who1000-cbrc/ref/UCSC/hg38/hg38.fa -bed stdin -fo stdout |\
     awk -F[":-"] '{print $1,$2,toupper($3)}' OFS='\t' - | bedops --range -3 --everything - > heptamers/reliable_heptamers_chr${chr}.bed &
 
 chr=XnonPAR
-awk '$1=="chrX"' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/quality_filtering/reliable_sites.bed |\
+awk '$1=="chrX"' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/quality_filtering/reliable_sites.bed |\
     bedops --difference - hg38_chrXPAR.bed | bedops --chop 1 - | bedops --range 3 --everything - | bedtools getfasta -tab -fi /rds/project/who1000-1/rds-who1000-cbrc/ref/UCSC/hg38/hg38.fa -bed stdin -fo stdout |\
     awk -F[":-"] '{print $1,$2,toupper($3)}' OFS='\t' - | bedops --range -3 --everything - > heptamers/reliable_heptamers_chr${chr}.bed &
 
@@ -36,16 +36,16 @@ mkdir annot_with_snvs
 
 for chr in {1..22}
 do
-    awk -v chrom="chr"${chr} '$1==chrom && $6/$7 > 0.0001 {print $1,$2,$3}' OFS='\t' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/variants/pass_snvs.bed |\
+    awk -v chrom="chr"${chr} '$1==chrom && $6/$7 > 0.0001 {print $1,$2,$3}' OFS='\t' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/variants/pass_snvs.bed |\
         uniq | bedmap --echo --indicator heptamers/reliable_heptamers_chr${chr}.bed - | sed 's/|/\t/g' - > annot_with_snvs/reliable_heptamers_chr${chr}_annot_with_SNVs_present.bed &
 done 
 
 chr=XPAR
-awk '$6/$7 > 0.0001 {print $1,$2,$3}' OFS='\t' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/variants/pass_snvs.bed |\
+awk '$6/$7 > 0.0001 {print $1,$2,$3}' OFS='\t' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/variants/pass_snvs.bed |\
     uniq | bedmap --echo --indicator heptamers/reliable_heptamers_chr${chr}.bed - | sed 's/|/\t/g' - > annot_with_snvs/reliable_heptamers_chr${chr}_annot_with_SNVs_present.bed &
 
 chr=XnonPAR
-awk '$6/$7 > 0.000075 {print $1,$2,$3}' OFS='\t' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/variants/pass_snvs.bed |\
+awk '$6/$7 > 0.000075 {print $1,$2,$3}' OFS='\t' /rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/variants/pass_snvs.bed |\
     uniq | bedmap --echo --indicator heptamers/reliable_heptamers_chr${chr}.bed - | sed 's/|/\t/g' - > annot_with_snvs/reliable_heptamers_chr${chr}_annot_with_SNVs_present.bed &
 
 wait

@@ -29,28 +29,22 @@ genome_segmentation = {'CTCF': CTCF, 'Prom': Prom, 'PromFlanking': PromFlanking,
                         'Enhancer': Enhancer, 'OpenChrom': OpenChrom, 'IntronDist': IntronDist,
                         'UTR': UTR, 'ncRNA': ncRNA, 'IntronCis': IntronCis, 'CDS': CDS}
 
-scars_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/scars_tracks/scars_hg38_incl_1bp_indels_raw.bed.gz"
+scarv_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/scarv_tracks/scarv_hg38_incl_1bp_indels_raw.bed.gz"
 linsight_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/LINSIGHT/LINSIGHT_hg38.bed.gz"
 remm_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/ReMM/ReMM.v0.3.1_hg38.bed.gz"
 funseq_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/funseq/hg38_NCscore_funseq216.bed.gz"
 
-score_annotation_fns = {'LINSIGHT': linsight_fn, 'SCARS': scars_fn,
+score_annotation_fns = {'LINSIGHT': linsight_fn, 'SCARV': scarv_fn,
                         'ReMM': remm_fn, 'funseq': funseq_fn}
 
-
 expression_annotation_LogStdExp_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/GTEx/expression_values_by_gene_LogStdExp.bed"
-
 gene_annotation_fns = {'LogStdExp': expression_annotation_LogStdExp_fn}
 
 ncER_perc_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/competing_tracks/ncER/ncER_1bp/ncER_perc_1bp_sorted_hg38.bed.gz"
-SCARS_perc_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/scars_tracks/scars_hg38_incl_1bp_indels.bed.gz"
-Orion_perc_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/reimplementing_Orion_gnomad_hg38/Orion/Orion_autosomes_hg38.bed.gz"
-CDTS_perc_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/reimplementing_CDTS_gnomad_hg38/CDTS/CDTS_diff_perconly_coordsorted_gnomAD_N32299_hg38.bed.gz"
-
-competing_score_annotation_fns = {'ncER': ncER_perc_fn, 'SCARS': SCARS_perc_fn, 'Orion': Orion_perc_fn, 'CDTS': CDTS_perc_fn}
+competing_score_annotation_fns = {'ncER': ncER_perc_fn}
 
 
-patho_SNVs_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/non_coding_pathogenic_variants/noncoding_pathogenic_HGMD_Regulatory_DM_DM?_8bpFromSplice_hg38_sorted.bed"
+patho_SNVs_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/non_coding_pathogenic_variants/noncoding_pathogenic_HGMD_Regulatory_DM_DM?_8bpFromSplice_hg38_sorted.bed"
 patho_SNVs = pr.read_bed(patho_SNVs_fn)
 patho_SNVs.columns = ['Chromosome', 'Start', 'End', 'Alt']
 
@@ -123,37 +117,70 @@ for i in range(k):
     percentiles_test = scarv_assess.toPercentile(preds_test, percentiles)
 
     df_fold = pd.concat([Pos_non_ncER_training.loc[Y_non_ncER_training==1].reset_index(drop=True), pd.DataFrame(percentiles_test)],1)
-    df_fold.columns = ['Chromosome', 'End', 'SCARS_clf']
+    df_fold.columns = ['Chromosome', 'End', 'SCARV_clf']
     df = df.append(df_fold)
 
 
 df['Start'] = df['End'] - 1
 
-gr = pr.PyRanges(df)
-gr = gr.join(patho_SNVs_competing_scores)
 
-df_full = gr[['ncER', 'SCARS_clf']].as_df().drop(['Chromosome', 'Start', 'End'], 1)
+############################################################
+CADD_track = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/CADD_v1.6/whole_genome_SNVs.tsv.gz"
+query_SNV_CADD_cmd = "tabix " + CADD_track + " -R <(awk '{gsub(\"chr\", \"\"); print $1,$3,$4}' " + patho_SNVs_fn + \
+    ") | awk '{print \"chr\"$1,$2-1,$2,$3,$4,$5}' OFS='\t' - | bedmap --echo --echo-map --skip-unmapped - " + patho_SNVs_fn + \
+    " | sed 's/|/\t/g' - | sed 's/;/\t/g' - | awk '$5==$10 || $5==$14 || $5==$18 {print $1,$2,$3,$6}' OFS='\t' - | sort | uniq | sort-bed - "
+CADD_scores_raw = subprocess.Popen(query_SNV_CADD_cmd, shell=True, executable='/bin/bash', stdout=subprocess.PIPE).communicate()
+
+chromosomes = [x.decode("utf-8") for x in CADD_scores_raw[0].split()[::4]]
+starts = [int(x) for x in CADD_scores_raw[0].split()[1::4]]
+ends = [int(x) for x in CADD_scores_raw[0].split()[2::4]]
+scores = [float(x) for x in CADD_scores_raw[0].split()[3::4]]
+
+CADD_samples_df = pd.read_csv("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/CADD_v1.6/CADD_samples_1_in_2500.txt", header=None)
+CADD_samples =  CADD_samples_df.iloc[:,0].tolist()
+CADD_percentiles = np.quantile(CADD_samples, np.arange(0, 1.001, 0.001))
+
+CADD_percentile_scores = scarv_assess.toPercentile(scores, CADD_percentiles)
+CADD_percentile_scores_inv = [100-float(x) for x in CADD_percentile_scores]
+
+CADD_df = pd.DataFrame({'Chromosome': chromosomes,
+                   'Start': starts,
+                   'End': ends,
+                   'CADD': CADD_percentile_scores_inv})
+min_CADD_by_pos = CADD_df.groupby(['Chromosome', 'Start', 'End'])['CADD'].min().reset_index()
+CADD_gr = pr.PyRanges(min_CADD_by_pos)
+
+patho_SNVs_competing_scores_full = patho_SNVs_competing_scores.join(CADD_gr, how='left').drop(['Start_b', 'End_b'])
+############################################################
+
+
+gr = pr.PyRanges(df)
+gr = gr.join(patho_SNVs_competing_scores_full)
+
+df_full = gr[['ncER', 'SCARV_clf', 'CADD']].as_df().drop(['Chromosome', 'Start', 'End'], 1)
 df_full_noNaN = df_full.dropna()
 
-df_full_noNaN.loc[:, 'ncER'] = (100 - df_full_noNaN['ncER'].astype(float))
-df_full_noNaN.loc[:, 'SCARS_clf'] = (100 - df_full_noNaN['SCARS_clf'].astype(float))
+df_full_noNaN.loc[:, 'CADD'] = (100 - df_full_noNaN['CADD'].astype(float))
 
 df_full_noNaN.loc[:, 'ncER'] = [math.ceil(10*x)/10 for x in df_full_noNaN['ncER']]
-df_full_noNaN.loc[:, 'SCARS_clf'] = [math.ceil(10*x)/10 + 0.1 for x in df_full_noNaN['SCARS_clf']]
+df_full_noNaN.loc[:, 'SCARV_clf'] = [math.ceil(10*x)/10 for x in df_full_noNaN['SCARV_clf']]
+df_full_noNaN.loc[:, 'CADD'] = [math.ceil(10*x)/10 for x in df_full_noNaN['CADD']]
 
 
 import matplotlib.pyplot as plt
 
 fig, axs = plt.subplots(1, 2, figsize=(10,5))
 
-scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['SCARS_clf'], axs[0])
+scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['SCARV_clf'], axs[0])
 scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['ncER'], axs[0])
+scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['CADD'], axs[0])
 
-scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['SCARS_clf'], axs[1], 5)
-scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['ncER'], axs[1], 5)
+scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['SCARV_clf'], axs[1], 95)
+scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['ncER'], axs[1], 95)
+scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['CADD'], axs[1], 95)
 
 fig.tight_layout()
-axs[0].legend(['SCARS-clf', 'ncER'], loc="lower center")
+axs[0].legend(['SCARV-clf', 'ncER', 'CADD'], loc="lower center")
 
 fig.savefig(outFile) 
 

@@ -15,7 +15,7 @@ for chrom in chr_list:
 	outFile = "Orion/Orion_percentiles_" + chrom + ".bed.gz"
 
 	df = pd.read_csv(inFile, sep='\t', header=None, names=["Chromosome", "Start", "End", "Orion"])	
-	df['Percentile'] = scars_assess.toPercentile(df['Orion'], Orion_percentiles)
+	df['Percentile'] = scarv_assess.toPercentile(df['Orion'], Orion_percentiles)
 
 	df.to_csv(outFile, sep='\t', columns=["Chromosome", "Start", "End", "Percentile"], index=False, header=False, compression='gzip')
 

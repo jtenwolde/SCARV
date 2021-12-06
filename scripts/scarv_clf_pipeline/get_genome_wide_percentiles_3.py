@@ -87,7 +87,7 @@ chr_lengths = dict(zip(chr_list, chr_lengths_raw))
 
 gencode_exons = pr.read_bed("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/gencode_v27/gencode_exons_hg38_v27.bed").merge()
 
-scars_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/scars_tracks/scars_hg38_incl_1bp_indels_raw.bed.gz"
+scarv_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/scarv_tracks/scarv_hg38_incl_1bp_indels_raw.bed.gz"
 linsight_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/LINSIGHT/LINSIGHT_hg38.bed.gz"
 expression_annotation_LogStdExp_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/GTEx/expression_values_by_gene_LogStdExp.bed"
 remm_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/ReMM/ReMM.v0.3.1_hg38.bed.gz"
@@ -96,7 +96,7 @@ funseq_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covar
 preds = np.empty(sum(chr_lengths_raw))
 counter = 0
 
-clf_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/models/scars_clf.model"
+clf_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/models/scarv_clf.model"
 clf = XGBClassifier() 
 clf.load_model(clf_fn)
 
@@ -111,8 +111,8 @@ for chrom in chr_list:
 	LINSIGHT = query_annotation_chromosome (linsight_fn, "LINSIGHT", chrom)
 	X[LINSIGHT.Start, 0] = LINSIGHT.LINSIGHT
 
-	SCARS = query_annotation_chromosome (scars_fn, "SCARS", chrom)
-	X[SCARS.Start, 1] = SCARS.SCARS
+	SCARV = query_annotation_chromosome (scarv_fn, "SCARV", chrom)
+	X[SCARV.Start, 1] = SCARV.SCARV
 
 	funseq = query_annotation_chromosome (funseq_fn, "funseq", chrom)
 	X[funseq.Start, 2] = funseq.funseq
@@ -141,7 +141,7 @@ for chrom in chr_list:
 	
 	df = pd.DataFrame({'Chromosome': chrom, 'Start': np.arange(chrom_length), 'End': np.arange(chrom_length) + 1, 'Score': score})
 	
-	outFile = outFolder + "scars_clf_" + chrom + ".bed.gz"
+	outFile = outFolder + "scarv_clf_" + chrom + ".bed.gz"
 	df.to_csv(outFile, sep='\t', columns=["Chromosome", "Start", "End", "Score"], index=False, header=False, compression='gzip')
 	
 	write_counter += chr_lengths[chrom]

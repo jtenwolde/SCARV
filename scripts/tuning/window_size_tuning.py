@@ -90,15 +90,15 @@ half_ws = max_window_size//2
 n_loci = int(1e5)
 
 reference_fasta = "/rds/project/who1000-1/rds-who1000-cbrc/ref/UCSC/hg38/hg38.fa"
-cnn_file = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/cnn/cnn_25.h5"
-calibration_file = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/calibration/calibration_25.h5"
+cnn_file = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry + "/cnn/cnn_25.h5"
+calibration_file = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry + "/calibration/calibration_25.h5"
 
 cnn = load_model(cnn_file, custom_objects={'RevCompConv1D': keras_genomics.layers.RevCompConv1D})
 calibration_model = joblib.load(calibration_file)
 
-reliable_sites = pr.read_bed("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/quality_filtering/reliable_sites.bed")
-training_loci = pr.read_bed("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/training_sites/training_loci.bed")
-singletons = scarv_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/variants/pass_singleton_snvs.bed")
+reliable_sites = pr.read_bed("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry + "/quality_filtering/reliable_sites.bed")
+training_loci = pr.read_bed("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry + "/training_sites/training_loci.bed")
+singletons = scarv_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry + "/variants/pass_singleton_snvs.bed")
 
 training_loci_subsample = scarv_queries.sample_loci_from_pr(training_loci, n_loci)
 training_loci_extd = training_loci_subsample.slack(half_ws)

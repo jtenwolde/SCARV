@@ -21,10 +21,10 @@ awk 'NR!=1 && $5=="testing" {print $1,$2-1,$2}' OFS='\t' 41467_2019_13212_MOESM3
 
 
 # gnomAD variants with AF > 1% across populations
-awk '$6/$7>0.01' ../../scars_pipeline_gnomad_hg38/nfe/variants/pass_snvs.bed | \
-    bedmap --echo --echo-map --skip-unmapped - <(awk '$6/$7>0.01' ../../scars_pipeline_gnomad_hg38/afr/variants/pass_snvs.bed) | \
+awk '$6/$7>0.01' ../../scarv_pipeline_gnomad_hg38/nfe/variants/pass_snvs.bed | \
+    bedmap --echo --echo-map --skip-unmapped - <(awk '$6/$7>0.01' ../../scarv_pipeline_gnomad_hg38/afr/variants/pass_snvs.bed) | \
     awk '$4==$10 && $5==$11 {print $1,$2,$3,$4,$5}' OFS='\t' - | \
-    bedmap --echo --skip-unmapped - ../../scars_pipeline_gnomad_hg38/nfe/quality_filtering/covered_loci.bed > \
+    bedmap --echo --skip-unmapped - ../../scarv_pipeline_gnomad_hg38/nfe/quality_filtering/covered_loci.bed > \
     gnomAD_hg38_covered_SNVs_AFgt0p01_AFRandNFE.bed
 
 

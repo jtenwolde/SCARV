@@ -22,9 +22,9 @@ k = 25
 genome = pybedtools.genome_registry.hg38
 reference_fasta = "/rds/project/who1000-1/rds-who1000-cbrc/ref/UCSC/hg38/hg38.fa"
 
-snvs = scarv_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry +"/variants/snvs_by_chr/pass_snvs_" + chrom_base + ".bed")
+snvs = scarv_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry +"/variants/snvs_by_chr/pass_snvs_" + chrom_base + ".bed")
 
-deletions = scarv_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry +"/variants/pass_deletions.bed")[chrom_base]
+deletions = scarv_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry +"/variants/pass_deletions.bed")[chrom_base]
 deletions.ref = deletions.ref.str.slice(1)
 deletions.alt = "X"
 deletions = deletions[deletions.ref.str.len() == 1]
@@ -33,15 +33,15 @@ deletions = deletions[deletions.lengths() == 1]
 
 snvs_and_deletions = pr.PyRanges(pd.concat([snvs.as_df(), deletions.as_df()]))
 
-insertions = scarv_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry +"/variants/pass_insertions.bed")[chrom_base]
+insertions = scarv_queries.load_variants("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry +"/variants/pass_insertions.bed")[chrom_base]
 insertions.ref = "X"
 insertions.alt = insertions.alt.str.slice(1)
 insertions = insertions[insertions.alt.str.len() == 1]
 
-reliable_sites = pr.read_bed("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/quality_filtering/reliable_sites_by_chr/reliable_sites_" + chrom + ".bed")
+reliable_sites = pr.read_bed("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry + "/quality_filtering/reliable_sites_by_chr/reliable_sites_" + chrom + ".bed")
 
 
-preds_by_kmer_file = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/preds_by_kmer.pkl"
+preds_by_kmer_file = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry + "/preds_by_kmer.pkl"
 preds_by_kmer = pd.read_pickle(preds_by_kmer_file)
 
 chrom_gr = pr.from_dict({'Chromosome': [chrom_base], 'Start': [0], 'End': [genome[chrom_base][1]]})

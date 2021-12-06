@@ -30,17 +30,17 @@ genome_segmentation = {'CTCF': CTCF, 'Prom': Prom, 'PromFlanking': PromFlanking,
                         'Enhancer': Enhancer, 'OpenChrom': OpenChrom, 'IntronDist': IntronDist,
                         'UTR': UTR, 'ncRNA': ncRNA, 'IntronCis': IntronCis, 'CDS': CDS}
 
-scars_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/scars_tracks/scars_hg38_incl_1bp_indels_raw.bed.gz"
+scarv_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/scarv_tracks/scarv_hg38_incl_1bp_indels_raw.bed.gz"
 linsight_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/LINSIGHT/LINSIGHT_hg38.bed.gz"
 remm_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/ReMM/ReMM.v0.3.1_hg38.bed.gz"
 funseq_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/funseq/hg38_NCscore_funseq216.bed.gz"
 expression_annotation_LogStdExp_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/GTEx/expression_values_by_gene_LogStdExp.bed"
 
-score_annotation_fns = {'LINSIGHT': linsight_fn, 'SCARS': scars_fn, 'ReMM': remm_fn, 'funseq': funseq_fn}
+score_annotation_fns = {'LINSIGHT': linsight_fn, 'SCARV': scarv_fn, 'ReMM': remm_fn, 'funseq': funseq_fn}
 gene_annotation_fns = {'LogStdExp': expression_annotation_LogStdExp_fn}
 
 
-patho_SNVs_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/non_coding_pathogenic_variants/noncoding_pathogenic_HGMD_Regulatory_DM_DM?_8bpFromSplice_hg38_sorted.bed"
+patho_SNVs_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/non_coding_pathogenic_variants/noncoding_pathogenic_HGMD_Regulatory_DM_DM?_8bpFromSplice_hg38_sorted.bed"
 patho_SNVs = pr.read_bed(patho_SNVs_fn)
 patho_SNVs.columns = ['Chromosome', 'Start', 'End', 'Alt']
 
@@ -69,11 +69,11 @@ data_shuffled = data.sample(frac=1)
 
 
 Y = data_shuffled['pathogenic'].to_numpy()
-X = data_shuffled[['LINSIGHT', 'SCARS', 'ReMM', 'funseq', 'LogStdExp']].to_numpy()
+X = data_shuffled[['LINSIGHT', 'SCARV', 'ReMM', 'funseq', 'LogStdExp']].to_numpy()
 
 
 clf = XGBClassifier(eval_metric='logloss', use_label_encoder=False)
 clf.fit(X, Y)
-clf_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/models/scars_clf.model"
+clf_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/models/scarv_clf.model"
 clf.save_model(clf_fn)
 

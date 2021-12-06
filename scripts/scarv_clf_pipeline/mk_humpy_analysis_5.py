@@ -14,20 +14,20 @@ MK_regions.columns = ["Chromosome", "Start", "End", "nearest_min_cov", "max_atac
 MK_regions.index = np.arange(len(MK_regions))
 MK_regions_split = MK_regions.tile(1)
 
-SCARS_clf_track_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/tracks/scars_clf.bed.gz"
+SCARV_clf_track_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/tracks/scarv_clf.bed.gz"
 
-scores_raw = os.popen("tabix " + SCARS_clf_track_fn + " -R " + MK_regions_fn).read().split()
+scores_raw = os.popen("tabix " + SCARV_clf_track_fn + " -R " + MK_regions_fn).read().split()
 chr_indices = np.where(["chr" in x for x in scores_raw])[0]
 scores_raw_split = [scores_raw[chr_indices[i]:chr_indices[i+1]] for i in np.arange(len(chr_indices)-1)]
 scores = [sublist + [np.nan] if len(sublist)==3 else sublist for sublist in scores_raw_split]
 
-scores_gr = scarv_queries.coordlist_to_pyranges(scores, ["Chromosome", "Start", "End", "SCARS_clf"])
-scores_gr.SCARS_clf = scores_gr.SCARS_clf.astype(float)
+scores_gr = scarv_queries.coordlist_to_pyranges(scores, ["Chromosome", "Start", "End", "SCARV_clf"])
+scores_gr.SCARV_clf = scores_gr.SCARV_clf.astype(float)
 
 MK_regions_split_annot = MK_regions_split.join(scores_gr)
-df = MK_regions_split_annot.as_df()[["index", "nearest_min_cov", "max_atac", "SCARS_clf"]]
+df = MK_regions_split_annot.as_df()[["index", "nearest_min_cov", "max_atac", "SCARV_clf"]]
 
-summary = df.groupby("index").agg({"nearest_min_cov": "first", "max_atac": "first", "SCARS_clf": np.median})
+summary = df.groupby("index").agg({"nearest_min_cov": "first", "max_atac": "first", "SCARV_clf": np.median})
 summary['max_atac_bin'] = pd.qcut(summary.max_atac, 8)
 print(summary.corr())
 
@@ -56,14 +56,14 @@ summary = pd.concat([summary, BPD_indicator_by_index], axis=1)
 
 fig, axs = plt.subplots(1, 2, figsize=(10,5))
 
-summary.boxplot(column='SCARS_clf', by='max_atac_bin', rot=45, fontsize=12, ax=axs[0])
-axs[0].set_ylabel("Median SCARS-clf", fontsize=13)
+summary.boxplot(column='SCARV_clf', by='max_atac_bin', rot=45, fontsize=12, ax=axs[0])
+axs[0].set_ylabel("Median SCARV-clf", fontsize=13)
 axs[0].set_xlabel("ATAC-seq peak", fontsize=13)
 axs[0].set_title("")
 
 
-summary.boxplot(column='SCARS_clf', by='BPD_indicator', fontsize=12, ax=axs[1])
-axs[1].set_ylabel("Median SCARS-clf", fontsize=13)
+summary.boxplot(column='SCARV_clf', by='BPD_indicator', fontsize=12, ax=axs[1])
+axs[1].set_ylabel("Median SCARV-clf", fontsize=13)
 axs[1].set_xlabel("Diagnostic-grade BPD gene", fontsize=13)
 axs[1].set_title("")
 

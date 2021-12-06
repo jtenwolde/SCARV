@@ -1,4 +1,4 @@
-# scars_classifier
+# scarv_classifier
 
 def query_matching_variants(patho_SNVs, benign_SNVs, ratio, genome_segmentation, splice_sites):
     from scarv import scarv_queries

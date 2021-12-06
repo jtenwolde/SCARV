@@ -11,7 +11,7 @@ k = 13
 ancestry = sys.argv[1]
 outFile = sys.argv[2]
 
-project_folder = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/"
+project_folder = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry + "/"
 cnn_file = project_folder + "cnn/cnn_" + str(k) + ".h5"
 calibration_file_snv_del = project_folder + "calibration/calibration_snv_del_" + str(k) + ".h5"
 calibration_file_ins = project_folder + "calibration/calibration_ins_" + str(k) + ".h5"

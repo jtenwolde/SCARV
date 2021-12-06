@@ -10,7 +10,7 @@ import sys
 k = 13
 ancestry = "nfe"
 
-project_folder = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/"
+project_folder = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry + "/"
 
 cnn_file = project_folder + "cnn/cnn_" + str(k) + ".h5"
 cnn = load_model(cnn_file, custom_objects={'RevCompConv1D': keras_genomics.layers.RevCompConv1D})
@@ -40,7 +40,7 @@ preds_uncalibrated_ins = cnn.predict(k_mers_ohe)
 preds_by_kmer_ins = pd.DataFrame(preds_uncalibrated_ins, index=k_mers, columns=['p_A', 'p_C', 'p_X', 'p_G', 'p_T'])
 
 # save in case of hpc problems
-outFile = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/preds_by_kmer_uncalibrated.pkl"
+outFile = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/preds_by_kmer_uncalibrated.pkl"
 preds_by_kmer = pd.concat([preds_by_kmer_snv_del, preds_by_kmer_ins])
 preds_by_kmer.to_pickle(outFile)
 
@@ -56,7 +56,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-preds_by_kmer_file = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/nfe/preds_by_kmer.pkl"
+preds_by_kmer_file = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/preds_by_kmer.pkl"
 preds_by_kmer = pd.read_pickle(preds_by_kmer_file)
 
 preds_by_kmer_snv_del = preds_by_kmer.loc[[x[0] != "X" for x in preds_by_kmer.index], :]

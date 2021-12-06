@@ -1,20 +1,6 @@
 from scarv import scarv_queries
 
 
-def get_scars (gr, reliable_sites, reference_fasta, cnn, calibration_model, pop_size, snvs, genome):
-    import numpy as np
-
-    gr_mgd = gr.merge()
-    gr_reliable_mgd = gr_mgd.intersect(reliable_sites)
-
-    S_obs = get_observed_entropy(gr_reliable_mgd, snvs, pop_size)
-    S_exp = get_expected_entropy(gr_reliable_mgd, snvs, pop_size, cnn, calibration_model, genome, reference_fasta)
-
-    S_by_range = match_scores_to_ranges(gr, gr_reliable_mgd, S_obs, S_exp)
-
-    return S_by_range
-
-
 def get_observed_entropy(gr, snvs, pop_size):
     import pandas as pd
     import numpy as np
@@ -176,13 +162,13 @@ def getCumulativeCounts(percentile_values):
     addMissingPercentiles(percentileTally)
 
     counts = [count for perc, count in sorted(percentileTally.items())]
-    countsCumulative = np.cumsum(counts)
+    countsCumulative = np.sum(counts) - np.cumsum(counts)
 
     return countsCumulative
 
 
 
-def plotCumulativePercCountPlot(countsCumulative, plt=None, x_upper=None, dashed=False):
+def plotCumulativePercCountPlot(countsCumulative, plt=None, x_lower=None, dashed=False):
     import numpy as np
 
     percentiles = np.arange(0, 100.1, 0.1)
@@ -195,11 +181,11 @@ def plotCumulativePercCountPlot(countsCumulative, plt=None, x_upper=None, dashed
     plt.set_xlabel("Percentile", fontsize=23)
     plt.set_ylabel("Cumulative count", fontsize=23)
 
-    plt.set_ylim(0, 1.1 * countsCumulative[-1])
+    plt.set_ylim(0, 1.1 * countsCumulative[0])
 
-    if x_upper is not None:
-        plt.set_xlim(0, x_upper)
-        plt.set_ylim(0, 1.1 * max([line.get_ydata()[x_upper * 10 - 1] for line in plt.lines]))
+    if x_lower is not None:
+        plt.set_xlim(x_lower, 100.1)
+        plt.set_ylim(0, 1.1 * max([line.get_ydata()[x_lower * 10 - 1] for line in plt.lines]))
 
     return plt
 

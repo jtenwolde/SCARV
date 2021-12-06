@@ -20,7 +20,7 @@ observed_entropy_sum = 0
 expected_entropy_sum = 0
 n_sites = 0
 
-track_folder = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scars_pipeline_gnomad_hg38/" + ancestry + "/scars_tracks/"
+track_folder = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/" + ancestry + "/scarv_tracks/"
 
 for chrom in chr_list:
     print("doing", chrom)
@@ -69,27 +69,27 @@ for chrom in chr_list:
     print("doing", chrom)
 
     inFile = track_folder + "entropies_" + chrom + ".bed.gz"
-    outFile = track_folder + "scars_" + chrom + ".bed.gz"
+    outFile = track_folder + "scarv_" + chrom + ".bed.gz"
 
     df = pd.read_csv(inFile, sep='\t', header=None, names=["Chromosome", "Start", "End", "H_Obs", "H_Exp", "Coverage"])
     
-    df['Scars'] = (df.H_Obs - average_observed_entropy)/median_absolute_deviation_H_obs - (df.H_Exp - average_expected_entropy)/median_absolute_deviation_H_exp
+    df['Scarv'] = (df.H_Obs - average_observed_entropy)/median_absolute_deviation_H_obs - (df.H_Exp - average_expected_entropy)/median_absolute_deviation_H_exp
     df_output = df[df.Coverage> 0.9 * window_size]
 
-    df_output.to_csv(outFile, sep='\t', columns=["Chromosome", "Start", "End", "Scars", "Coverage"], index=False, header=False, compression='gzip')
+    df_output.to_csv(outFile, sep='\t', columns=["Chromosome", "Start", "End", "Scarv", "Coverage"], index=False, header=False, compression='gzip')
 
 
 
-SCARS_samples = os.popen("zcat " + track_folder + "scars_chr*.gz | awk -v seed=$RANDOM 'BEGIN{srand(seed)} {x=rand(); if (x<1/2500) {print $4}}' - ").read().split()
-SCARS_percentiles =  np.quantile(list(map(float, SCARS_samples)), np.arange(0, 1.001, 0.001))
+SCARV_samples = os.popen("zcat " + track_folder + "scarv_chr*.gz | awk -v seed=$RANDOM 'BEGIN{srand(seed)} {x=rand(); if (x<1/2500) {print $4}}' - ").read().split()
+SCARV_percentiles =  np.quantile(list(map(float, SCARV_samples)), np.arange(0, 1.001, 0.001))
 
 for chrom in chr_list:
     print("doing", chrom)
-    inFile = track_folder + "scars_" + chrom + ".bed.gz"
-    outFile = track_folder + "scars_percentiles_" + chrom + ".bed.gz"
+    inFile = track_folder + "scarv_" + chrom + ".bed.gz"
+    outFile = track_folder + "scarv_percentiles_" + chrom + ".bed.gz"
 
-    df = pd.read_csv(inFile, sep='\t', header=None, names=["Chromosome", "Start", "End", "Scars", "Coverage"])  
-    df['Percentile'] = scarv_assess.toPercentile(df['Scars'], SCARS_percentiles)
+    df = pd.read_csv(inFile, sep='\t', header=None, names=["Chromosome", "Start", "End", "Scarv", "Coverage"])  
+    df['Percentile'] = scarv_assess.toPercentile(df['Scarv'], SCARV_percentiles)
 
     df.to_csv(outFile, sep='\t', columns=["Chromosome", "Start", "End", "Percentile"], index=False, header=False, compression='gzip')
 
