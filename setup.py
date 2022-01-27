@@ -2,7 +2,7 @@ from distutils.core import setup
 setup(
   name = 'scarv',         # How you named your package folder (MyLib)
   packages = ['scarv'],   # Chose the same as "name"
-  version = '0.4',      # Start with a small number and increase it with every change you make
+  version = '0.5',      # Start with a small number and increase it with every change you make
   license='MIT',        # Chose a license from here: https://help.github.com/articles/licensing-a-repository
   description = 'Selective Constraint Against Rare Variants',   # Give a short description about your library
   author = 'Joep ten Wolde',                   # Type in your name
@@ -16,11 +16,9 @@ setup(
           'pyranges',
           'xgboost',
           'sklearn',
-          'itertools',
           'keras',
           'keras_genomics',
           'pysam',
-          'gzip',
           'pyBigWig'
       ],
   classifiers=[
