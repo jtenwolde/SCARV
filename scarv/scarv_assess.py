@@ -1,56 +1,10 @@
 from scarv import scarv_queries
 
 
-def get_observed_entropy(gr, snvs, pop_size):
-    import pandas as pd
-    import numpy as np
-    import pyranges as pr
-
-    gr_spl = gr.tile(1)
-    index = pd.Series(range(len(gr_spl)), name="id")
-    gr_spl = gr_spl.insert(index)
-
-    snvHits = gr_spl.join(snvs).as_df()
-    
-    anyHits = (snvHits.shape[0] != 0)
-    if not anyHits:
-        return np.zeros(gr.length)
-
-    Alt_AC_table = np.zeros(shape=(gr.length, 4), dtype=np.int)
-
-    Alt_AC_table[snvHits.loc[snvHits.alt=="A"].id, 0] = snvHits.loc[snvHits.alt=="A"].ac
-    Alt_AC_table[snvHits.loc[snvHits.alt=="C"].id, 1] = snvHits.loc[snvHits.alt=="C"].ac
-    Alt_AC_table[snvHits.loc[snvHits.alt=="G"].id, 2] = snvHits.loc[snvHits.alt=="G"].ac
-    Alt_AC_table[snvHits.loc[snvHits.alt=="T"].id, 3] = snvHits.loc[snvHits.alt=="T"].ac
-
-    Ref_AC = np.repeat(2*pop_size, gr.length)
-    Ref_AC[snvHits.id] = snvHits.an
-    Ref_AC -= np.sum(Alt_AC_table, axis=1)
-
-    AC_table = np.c_[Alt_AC_table, Ref_AC]
-    S = get_entropy(AC_table/np.sum(AC_table, axis=1)[:, np.newaxis])
-
-    return S
-
-
-def get_expected_entropy(gr, snvs, pop_size, cnn, calibration_model, genome, reference_fasta):
-    
-    flank = cnn.input_shape[1]//2
-
-    sequence = scarv_queries.query_sequence(gr, flank, genome, reference_fasta)
-    scarv_queries.correct_refs(gr, snvs, sequence)    
-
-    preds_uncalibrated = cnn.predict(sequence)
-    preds = calibrate(preds_uncalibrated, calibration_model, sequence)
-    
-    S = get_entropy(preds)  
-
-    return S
-
-
 def get_entropy (p):
     import numpy as np
     return np.nansum(-p * np.log2(p), axis=p.ndim-1)
+
 
 
 def calibrate(uncalibrated_predictions, calibration_model, sequence):
@@ -72,6 +26,7 @@ def calibrate(uncalibrated_predictions, calibration_model, sequence):
 
     prediction = ref_prob + alternate_probs
     return prediction
+
 
 
 def match_scores_to_ranges(gr, gr_reliable_mgd, obs_reliable_flat, exp_reliable_flat):

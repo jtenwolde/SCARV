@@ -7,9 +7,11 @@ import pyranges as pr
 from xgboost import XGBClassifier
 import os
 import math
+import subprocess
 
 os.chdir("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier")
 
+# load genome segmentation regions
 CTCF = pr.read_bed('regulatory_build/homo_sapiens.GRCh38.Regulatory_Build.regulatory_features.20190329_CTCF_simplified.bed')
 Prom = pr.read_bed('regulatory_build/homo_sapiens.GRCh38.Regulatory_Build.regulatory_features.20190329_Promoter_simplified.bed')
 PromFlanking = pr.read_bed('regulatory_build/homo_sapiens.GRCh38.Regulatory_Build.regulatory_features.20190329_Promoter_Flanking_simplified.bed')
@@ -29,6 +31,8 @@ genome_segmentation = {'CTCF': CTCF, 'Prom': Prom, 'PromFlanking': PromFlanking,
                         'Enhancer': Enhancer, 'OpenChrom': OpenChrom, 'IntronDist': IntronDist,
                         'UTR': UTR, 'ncRNA': ncRNA, 'IntronCis': IntronCis, 'CDS': CDS}
 
+
+# load the SCARV-clf covariates unrelated to nearest gene
 scarv_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/nfe/scarv_tracks/scarv_hg38_incl_1bp_indels_raw.bed.gz"
 linsight_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/LINSIGHT/LINSIGHT_hg38.bed.gz"
 remm_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/ReMM/ReMM.v0.3.1_hg38.bed.gz"
@@ -37,11 +41,16 @@ funseq_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covar
 score_annotation_fns = {'LINSIGHT': linsight_fn, 'SCARV': scarv_fn,
                         'ReMM': remm_fn, 'funseq': funseq_fn}
 
+
+# load the SCARV-clf covariates related to nearest gene
 expression_annotation_LogStdExp_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/covariates/GTEx/expression_values_by_gene_LogStdExp.bed"
 gene_annotation_fns = {'LogStdExp': expression_annotation_LogStdExp_fn}
 
+
+
 ncER_perc_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/competing_tracks/ncER/ncER_1bp/ncER_perc_1bp_sorted_hg38.bed.gz"
-competing_score_annotation_fns = {'ncER': ncER_perc_fn}
+JARVIS_score_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/JARVIS/jarvis.both-features.sorted.hg38.bed.gz"
+competing_score_annotation_fns = {'ncER': ncER_perc_fn, 'JARVIS': JARVIS_score_fn}
 
 
 patho_SNVs_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/scarv_pipeline_gnomad_hg38/non_coding_pathogenic_variants/noncoding_pathogenic_HGMD_Regulatory_DM_DM?_8bpFromSplice_hg38_sorted.bed"
@@ -50,6 +59,7 @@ patho_SNVs.columns = ['Chromosome', 'Start', 'End', 'Alt']
 
 patho_SNVs_annotated = scarv_classifier.load_data(patho_SNVs, patho_SNVs_fn, score_annotation_fns, gene_annotation_fns)
 patho_SNVs_competing_scores = scarv_classifier.load_data(patho_SNVs, patho_SNVs_fn, competing_score_annotation_fns)
+
 
 benign_SNVs_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/variants/gnomAD_hg38_covered_SNVs_AFgt0p01_AFRandNFE.bed"
 benign_SNVs = pr.read_bed(benign_SNVs_fn)
@@ -87,7 +97,11 @@ Y = data_shuffled['pathogenic'].to_numpy()
 X = data_shuffled.drop(['Chromosome', 'End', 'pathogenic'], axis=1).to_numpy()
 Pos = data_shuffled[['Chromosome', 'End']].reset_index(drop=True)
 
-random_loci_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/competing_tracks/ncER/ncER_1bp/ncER_random_loci_1_in_30k.bed"
+
+
+################# SCARV-clf ######################
+
+random_loci_fn = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/classifier/classifier_comparison_sites.bed"
 random_loci = pr.read_bed(random_loci_fn)
 random_loci = random_loci[random_loci.Chromosome!="chrY"]
 random_loci_data = scarv_classifier.load_data(random_loci, random_loci_fn, score_annotation_fns, gene_annotation_fns)
@@ -122,9 +136,37 @@ for i in range(k):
 
 
 df['Start'] = df['End'] - 1
+gr = pr.PyRanges(df)
+
+#######################################################
 
 
-############################################################
+#################  JARVIS #####################
+
+JARVIS_samples_df = pd.read_csv("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/JARVIS/JARVIS_classifier_comparison_samples.txt", header=None)
+JARVIS_samples =  JARVIS_samples_df.iloc[:,0].tolist()
+JARVIS_percentiles = np.quantile(JARVIS_samples, np.arange(0, 1.001, 0.001))
+
+JARVIS_percentile_scores = scarv_assess.toPercentile(patho_SNVs_competing_scores.JARVIS, JARVIS_percentiles)
+patho_SNVs_competing_scores = patho_SNVs_competing_scores.insert(pd.Series(data = JARVIS_percentile_scores, name="JARVIS"))
+
+################################################
+
+
+
+################# ncER ###################
+
+ncER_samples_df = pd.read_csv("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/competing_tracks/ncER/ncER_1bp/ncER_classifier_comparison_samples.txt", header=None)
+ncER_samples =  ncER_samples_df.iloc[:,0].tolist()
+ncER_autosomal_percentiles = np.quantile(ncER_samples, np.arange(0, 1.001, 0.001))
+
+ncER_autosomal_percentile_scores = scarv_assess.toPercentile(patho_SNVs_competing_scores.ncER.values, ncER_autosomal_percentiles)
+patho_SNVs_competing_scores = patho_SNVs_competing_scores.insert(pd.Series(data = ncER_autosomal_percentile_scores, name="ncER"))
+
+###########################################
+
+
+#######################  CADD  #############################
 CADD_track = "/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/CADD_v1.6/whole_genome_SNVs.tsv.gz"
 query_SNV_CADD_cmd = "tabix " + CADD_track + " -R <(awk '{gsub(\"chr\", \"\"); print $1,$3,$4}' " + patho_SNVs_fn + \
     ") | awk '{print \"chr\"$1,$2-1,$2,$3,$4,$5}' OFS='\t' - | bedmap --echo --echo-map --skip-unmapped - " + patho_SNVs_fn + \
@@ -136,35 +178,33 @@ starts = [int(x) for x in CADD_scores_raw[0].split()[1::4]]
 ends = [int(x) for x in CADD_scores_raw[0].split()[2::4]]
 scores = [float(x) for x in CADD_scores_raw[0].split()[3::4]]
 
-CADD_samples_df = pd.read_csv("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/CADD_v1.6/CADD_samples_1_in_2500.txt", header=None)
+CADD_samples_df = pd.read_csv("/rds/project/who1000-1/rds-who1000-cbrc/user/jwt44/CADD_v1.6/CADD_classifier_comparison_samples.txt", header=None)
 CADD_samples =  CADD_samples_df.iloc[:,0].tolist()
 CADD_percentiles = np.quantile(CADD_samples, np.arange(0, 1.001, 0.001))
-
 CADD_percentile_scores = scarv_assess.toPercentile(scores, CADD_percentiles)
-CADD_percentile_scores_inv = [100-float(x) for x in CADD_percentile_scores]
 
 CADD_df = pd.DataFrame({'Chromosome': chromosomes,
                    'Start': starts,
                    'End': ends,
-                   'CADD': CADD_percentile_scores_inv})
-min_CADD_by_pos = CADD_df.groupby(['Chromosome', 'Start', 'End'])['CADD'].min().reset_index()
-CADD_gr = pr.PyRanges(min_CADD_by_pos)
+                   'CADD': CADD_percentile_scores})
+max_CADD_perc_by_pos = CADD_df.groupby(['Chromosome', 'Start', 'End'])['CADD'].max().reset_index()
+CADD_gr = pr.PyRanges(max_CADD_perc_by_pos)
 
 patho_SNVs_competing_scores_full = patho_SNVs_competing_scores.join(CADD_gr, how='left').drop(['Start_b', 'End_b'])
 ############################################################
 
 
-gr = pr.PyRanges(df)
-gr = gr.join(patho_SNVs_competing_scores_full)
 
-df_full = gr[['ncER', 'SCARV_clf', 'CADD']].as_df().drop(['Chromosome', 'Start', 'End'], 1)
+
+############# Putting everything together ##################
+
+gr = gr.join(patho_SNVs_competing_scores_full)
+gr = pr.PyRanges(gr.as_df().loc[[chrom not in ['chrX','chrY'] for chrom in gr.Chromosome]])
+
+df_full = gr[['ncER', 'SCARV_clf', 'CADD', 'JARVIS']].as_df().drop(['Chromosome', 'Start', 'End'], 1)
 df_full_noNaN = df_full.dropna()
 
-df_full_noNaN.loc[:, 'CADD'] = (100 - df_full_noNaN['CADD'].astype(float))
-
-df_full_noNaN.loc[:, 'ncER'] = [math.ceil(10*x)/10 for x in df_full_noNaN['ncER']]
-df_full_noNaN.loc[:, 'SCARV_clf'] = [math.ceil(10*x)/10 for x in df_full_noNaN['SCARV_clf']]
-df_full_noNaN.loc[:, 'CADD'] = [math.ceil(10*x)/10 for x in df_full_noNaN['CADD']]
+############################################################
 
 
 import matplotlib.pyplot as plt
@@ -174,27 +214,15 @@ fig, axs = plt.subplots(1, 2, figsize=(10,5))
 scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['SCARV_clf'], axs[0])
 scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['ncER'], axs[0])
 scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['CADD'], axs[0])
+scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['JARVIS'], axs[0])
 
 scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['SCARV_clf'], axs[1], 95)
 scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['ncER'], axs[1], 95)
 scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['CADD'], axs[1], 95)
+scarv_assess.percScoreToCumulativePercCountPlot(df_full_noNaN['JARVIS'], axs[1], 95)
 
 fig.tight_layout()
-axs[0].legend(['SCARV-clf', 'ncER', 'CADD'], loc="lower center")
+axs[0].legend(['SCARV-clf', 'ncER', 'CADD', 'JARVIS'], loc="lower center")
 
 fig.savefig(outFile) 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

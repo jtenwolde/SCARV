@@ -87,7 +87,7 @@ training_loci_subsample_insertions.End -= 1
 sequence_ins_max_flank = sequence_ins_max_flank[sequence_ins_max_flank[:, 2*max_flank,2]==1]
 
 
-for flank in range(2, 13, 1):
+for flank in range(2, max_flank, 1):
     sequence_snvs_and_dels = sequence_snvs_and_dels_max_flank[:, (2*max_flank-2*flank):(2*max_flank+2*flank+1), :]
     indices, output, multiplier_split = scarv_queries.split_data(training_loci_subsample_snvs_and_dels, chrXnonPAR, singleton_snvs_and_deletions, sequence_snvs_and_dels, pop_split)
     balanced_multiplier = multiplier_split[:,0]
